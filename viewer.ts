@@ -9,7 +9,7 @@ import {
   MIN_PANEL_HEIGHT,
   SEARCH_SCROLL_OFFSET,
 } from "./constants";
-import { loadFileContent } from "./file-viewer";
+import { loadFileContent, type RenderedLines } from "./file-viewer";
 import type { FileNode } from "./types";
 import { isMarkdownPath, isUntrackedStatus } from "./utils";
 import { createTextInputBuffer } from "./input-utils";
@@ -33,12 +33,13 @@ type ViewerMode = "normal" | "select" | "search" | "comment";
 
 interface ViewerState {
   file: FileNode | null;
-  content: string[];
+  renderedLines: RenderedLines;
   rawContent: string;
   scroll: number;
   cursor: number;
   diffMode: boolean;
   renderMarkdown: boolean;
+  wordWrap: boolean;
   mode: ViewerMode;
   selectStart: number;
   selectEnd: number;
@@ -77,12 +78,13 @@ export function createViewer(
 
   const state: ViewerState = {
     file: null,
-    content: [],
+    renderedLines: { lines: [], rowGroups: [], logicalLines: [] },
     rawContent: "",
     scroll: 0,
     cursor: 0,
     diffMode: false,
     renderMarkdown: true,
+    wordWrap: false,
     mode: "normal",
     selectStart: 0,
     selectEnd: 0,
@@ -106,6 +108,10 @@ export function createViewer(
   function switchMarkdownToRaw(): boolean {
     if (!isRenderedMarkdownMode()) return false;
     state.renderMarkdown = false;
+    state.cursor = 0;
+    state.selectStart = 0;
+    state.selectEnd = 0;
+    state.scroll = 0;
     const width = state.lastRenderWidth || process.stdout.columns || 80;
     reloadContent(width);
     return true;
@@ -135,14 +141,14 @@ export function createViewer(
     state.selectEnd = 0;
   }
 
-  function setMode(mode: ViewerMode): void {
+  function setMode(mode: ViewerMode, preserveSearch = false): void {
     if (mode !== state.mode) {
       searchInput.reset();
       commentInput.reset();
     }
 
     state.mode = mode;
-    if (mode !== "search") resetSearch();
+    if (mode !== "search" && !preserveSearch) resetSearch();
     if (mode !== "comment") resetComment();
     if (mode === "normal") {
       clearSelection();
@@ -150,7 +156,7 @@ export function createViewer(
   }
 
   function getMaxScroll(): number {
-    return Math.max(0, state.content.length - state.height);
+    return Math.max(0, state.renderedLines.lines.length - state.height);
   }
 
   function refreshRawContent(): void {
@@ -183,18 +189,79 @@ export function createViewer(
   }
 
   function ensureCursorVisible(): void {
-    state.cursor = Math.min(Math.max(0, state.cursor), Math.max(0, state.content.length - 1));
+    state.cursor = Math.min(Math.max(0, state.cursor), Math.max(0, state.renderedLines.lines.length - 1));
     if (state.cursor < state.scroll) state.scroll = state.cursor;
     if (state.cursor >= state.scroll + state.height) state.scroll = state.cursor - state.height + 1;
     clampScroll();
   }
 
+  function rowGroup(index: number): number {
+    return state.renderedLines.rowGroups[index] ?? index;
+  }
+
+  function groupStart(index: number): number {
+    const group = rowGroup(index);
+    while (index > 0 && rowGroup(index - 1) === group) index--;
+    return index;
+  }
+
+  function firstRowForGroup(group: number): number {
+    const row = state.renderedLines.rowGroups.indexOf(group);
+    return row === -1 ? Math.min(Math.max(0, group), Math.max(0, state.renderedLines.lines.length - 1)) : row;
+  }
+
+  function groupEnd(index: number): number {
+    const group = rowGroup(index);
+    while (index + 1 < state.renderedLines.lines.length && rowGroup(index + 1) === group) index++;
+    return index;
+  }
+
+  function selectionBounds(): { start: number; end: number } {
+    return {
+      start: Math.min(rowGroup(state.selectStart), rowGroup(state.selectEnd)),
+      end: Math.max(rowGroup(state.selectStart), rowGroup(state.selectEnd)),
+    };
+  }
+
+  function moveCursor(direction: 1 | -1): void {
+    const next = stepGroup(state.cursor, direction);
+    if (next !== null) state.cursor = next;
+    ensureCursorVisible();
+  }
+
+  function stepGroup(index: number, direction: 1 | -1): number | null {
+    const next = direction > 0 ? groupEnd(index) + 1 : groupStart(index) - 1;
+    return next >= 0 && next < state.renderedLines.lines.length ? next : null;
+  }
+
+  function moveCursorByGroups(direction: 1 | -1, count: number): void {
+    for (let step = 0; step < count; step++) {
+      const next = stepGroup(state.cursor, direction);
+      if (next === null) break;
+      state.cursor = next;
+    }
+    ensureCursorVisible();
+  }
+
   function reloadContent(width: number): void {
     if (!state.file) return;
+    const cursorGroup = rowGroup(state.cursor);
+    const selectStartGroup = rowGroup(state.selectStart);
+    const selectEndGroup = rowGroup(state.selectEnd);
+    const preserveSelection = state.mode === "select" || state.mode === "comment";
     refreshRawContent();
     const hasChanges = !!state.file.gitStatus;
-    const result = loadFileContent(state.file.path, getRoot(), state.diffMode, hasChanges, width, state.renderMarkdown, theme);
-    state.content = result.lines;
+    const result = loadFileContent(
+      state.file.path,
+      { cwd: getRoot(), diffMode: state.diffMode, hasChanges, width, renderMarkdown: state.renderMarkdown, wordWrap: state.wordWrap },
+      theme
+    );
+    state.renderedLines = result;
+    state.cursor = firstRowForGroup(cursorGroup);
+    if (preserveSelection) {
+      state.selectStart = firstRowForGroup(selectStartGroup);
+      state.selectEnd = firstRowForGroup(selectEndGroup);
+    }
     ensureCursorVisible();
     state.renderMarkdown = result.renderedMarkdown;
     state.lastRenderWidth = width;
@@ -214,9 +281,9 @@ export function createViewer(
     }
 
     const q = state.searchQuery.toLowerCase();
-    const rawLines = state.rawContent.split("\n");
-    for (let i = 0; i < rawLines.length; i++) {
-      if (rawLines[i].toLowerCase().includes(q)) {
+    const searchableLines = state.diffMode ? state.renderedLines.logicalLines : state.rawContent.split("\n");
+    for (let i = 0; i < searchableLines.length; i++) {
+      if (searchableLines[i].replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").toLowerCase().includes(q)) {
         state.searchMatches.push(i);
       }
     }
@@ -241,7 +308,8 @@ export function createViewer(
       state.searchIndex = nearestIndex;
     }
 
-    state.scroll = Math.max(0, state.searchMatches[state.searchIndex] - SEARCH_SCROLL_OFFSET);
+    state.cursor = firstRowForGroup(state.searchMatches[state.searchIndex]);
+    state.scroll = Math.max(0, state.cursor - SEARCH_SCROLL_OFFSET);
     clampScroll();
   }
 
@@ -250,7 +318,8 @@ export function createViewer(
     state.searchIndex += direction;
     if (state.searchIndex < 0) state.searchIndex = state.searchMatches.length - 1;
     if (state.searchIndex >= state.searchMatches.length) state.searchIndex = 0;
-    state.scroll = Math.max(0, state.searchMatches[state.searchIndex] - SEARCH_SCROLL_OFFSET);
+    state.cursor = firstRowForGroup(state.searchMatches[state.searchIndex]);
+    state.scroll = Math.max(0, state.cursor - SEARCH_SCROLL_OFFSET);
     clampScroll();
   }
 
@@ -258,19 +327,20 @@ export function createViewer(
     if (!state.file) return null;
 
     const rawLines = state.rawContent.split("\n");
+    const bounds = selectionBounds();
     const selectedText = state.diffMode
-      ? state.content
-          .slice(state.selectStart, state.selectEnd + 1)
-          .map(line => line.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/\x1b\][^\x07]*(?:\x07|\x1b\\)/g, ""))
+      ? state.renderedLines.logicalLines
+          .slice(bounds.start, bounds.end + 1)
+          .map(line => line.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/^([+-]?)\s*\d+\s│\s?/, "$1 "))
           .join("\n")
-      : rawLines.slice(state.selectStart, state.selectEnd + 1).join("\n");
+      : rawLines.slice(bounds.start, bounds.end + 1).join("\n");
     const rel = relative(projectCwd, state.file.path);
     const relPath = !rel || rel.startsWith("..") ? state.file.path : rel;
     const lineRange = state.diffMode
-      ? `diff lines ${state.selectStart + 1}-${state.selectEnd + 1}`
-      : state.selectStart === state.selectEnd
-        ? `line ${state.selectStart + 1}`
-        : `lines ${state.selectStart + 1}-${state.selectEnd + 1}`;
+      ? `diff lines ${bounds.start + 1}-${bounds.end + 1}`
+      : bounds.start === bounds.end
+        ? `line ${bounds.start + 1}`
+        : `lines ${bounds.start + 1}-${bounds.end + 1}`;
     const ext = state.diffMode ? "diff" : state.file.name.split(".").pop() || "";
 
     return { relPath, lineRange, ext, selectedText, isDiff: state.diffMode };
@@ -296,8 +366,10 @@ export function createViewer(
     } else if (isMarkdownFile()) {
       header += theme.fg("accent", state.renderMarkdown ? " [RENDERED]" : " [RAW]");
     }
+    header += theme.fg("accent", state.wordWrap ? " [WRAP]" : " [NO WRAP]");
     if (state.mode === "select" || state.mode === "comment") {
-      header += theme.fg("accent", ` [SELECT ${state.selectStart + 1}-${state.selectEnd + 1}]`);
+      const bounds = selectionBounds();
+      header += theme.fg("accent", ` [SELECT ${bounds.start + 1}-${bounds.end + 1}]`);
     }
 
     if (state.file.diffStats) {
@@ -358,13 +430,13 @@ export function createViewer(
 
   function renderFooter(width: number): string[] {
     const lines: string[] = [];
-    const pct = state.content.length > 0
-      ? Math.round((state.scroll / Math.max(1, state.content.length - state.height)) * 100)
+    const pct = state.renderedLines.lines.length > 0
+      ? Math.round((state.scroll / Math.max(1, state.renderedLines.lines.length - state.height)) * 100)
       : 0;
 
     if (state.mode === "comment") {
       lines.push(...renderCommentEditor(width));
-      lines.push(theme.fg("borderMuted", "─".repeat(width)));
+      lines.push(theme.fg("border", "─".repeat(width)));
     }
 
     let help: string;
@@ -379,7 +451,7 @@ export function createViewer(
       const markdownHelp = isMarkdownFile() && !state.diffMode ? "m: raw/render  " : "";
       help = theme.fg(
         "dim",
-        `j/k: cursor  v: select  /: search  n/N: next/prev match  ${markdownHelp}[]: files  ${state.file?.gitStatus && !isUntracked ? "d: diff  " : ""}q: back  ${pct}%`
+        `j/k: cursor  v: select  /: search  n/N: next/prev match  w: wrap  ${markdownHelp}[]: files  ${state.file?.gitStatus && !isUntracked ? "d: diff  " : ""}q: back  ${pct}%`
       );
     }
     lines.push(truncateToWidth(help, width));
@@ -402,8 +474,9 @@ export function createViewer(
       state.cursor = 0;
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
+      state.wordWrap = false;
       setMode("normal");
-      state.content = [];
+      state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.lastRenderWidth = 0;
       state.lastLoadedMtimeMs = null;
       refreshRawContent();
@@ -415,9 +488,10 @@ export function createViewer(
 
     close(): void {
       state.file = null;
-      state.content = [];
+      state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.rawContent = "";
       state.renderMarkdown = true;
+      state.wordWrap = false;
       state.lastLoadedMtimeMs = null;
       setMode("normal");
     },
@@ -426,24 +500,27 @@ export function createViewer(
       if (!state.file) return [];
 
       const shouldAutoRefresh = state.mode !== "select" && state.mode !== "comment";
-      if (state.lastRenderWidth !== width || state.content.length === 0 || (shouldAutoRefresh && hasFileChangedOnDisk())) {
+      if (state.lastRenderWidth !== width || state.renderedLines.lines.length === 0 || (shouldAutoRefresh && hasFileChangedOnDisk())) {
         reloadContent(width);
       }
 
       const lines: string[] = [];
       lines.push(renderHeader(width));
-      lines.push(theme.fg("borderMuted", "─".repeat(width)));
+      lines.push(theme.fg("border", "─".repeat(width)));
 
-      const visible = state.content.slice(state.scroll, state.scroll + state.height);
+      const visible = state.renderedLines.lines.slice(state.scroll, state.scroll + state.height);
       for (let i = 0; i < state.height; i++) {
         if (i < visible.length) {
           const lineIdx = state.scroll + i;
           let line = truncateToWidth(visible[i] || "", width);
-          const selected = (state.mode === "select" || state.mode === "comment") && lineIdx >= state.selectStart && lineIdx <= state.selectEnd;
+          const group = rowGroup(lineIdx);
+          const bounds = selectionBounds();
+          const selected = (state.mode === "select" || state.mode === "comment") && group >= bounds.start && group <= bounds.end;
           if (selected) {
-            const marked = line.replace("│", theme.fg("accent", "┃"));
+            const marker = lineIdx === groupEnd(state.selectEnd) ? "▸" : "┃";
+            const marked = line.replace("│", theme.fg("accent", marker));
             line = theme.bg("selectedBg", marked + " ".repeat(Math.max(0, width - visibleWidth(marked))));
-          } else if (lineIdx === state.cursor) {
+          } else if (group === rowGroup(state.cursor)) {
             line = theme.bg("selectedBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
           }
           lines.push(line);
@@ -452,7 +529,7 @@ export function createViewer(
         }
       }
 
-      lines.push(theme.fg("borderMuted", "─".repeat(width)));
+      lines.push(theme.fg("border", "─".repeat(width)));
       lines.push(...renderFooter(width));
 
       return lines;
@@ -486,7 +563,7 @@ export function createViewer(
 
       if (state.mode === "search") {
         if (matchesKey(data, Key.enter)) {
-          setMode("normal");
+          setMode("normal", true);
         } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
           setMode("normal");
         } else if (matchesKey(data, Key.backspace)) {
@@ -524,46 +601,55 @@ export function createViewer(
         jumpToNextMatch(1);
         return { type: "none" };
       }
-      if (matchesKey(data, "N") && state.mode !== "select" && state.searchMatches.length > 0) {
+      if (matchesKey(data, "shift+n") && state.mode !== "select" && state.searchMatches.length > 0) {
         jumpToNextMatch(-1);
         return { type: "none" };
       }
       if (matchesKey(data, "j") || matchesKey(data, Key.down)) {
         if (state.mode === "select") {
-          state.selectEnd = Math.min(state.content.length - 1, state.selectEnd + 1);
-          state.cursor = state.selectEnd;
+          const next = groupEnd(state.selectEnd) + 1;
+          if (next < state.renderedLines.lines.length) state.selectEnd = state.cursor = next;
+          ensureCursorVisible();
         } else {
-          state.cursor = Math.min(Math.max(0, state.content.length - 1), state.cursor + 1);
+          moveCursor(1);
         }
-        ensureCursorVisible();
         return { type: "none" };
       }
       if (matchesKey(data, "k") || matchesKey(data, Key.up)) {
         if (state.mode === "select") {
-          state.selectEnd = Math.max(state.selectStart, state.selectEnd - 1);
-          state.cursor = state.selectEnd;
+          const previous = groupStart(state.selectEnd) - 1;
+          if (previous >= groupStart(state.selectStart)) state.selectEnd = state.cursor = previous;
+          ensureCursorVisible();
         } else {
-          state.cursor = Math.max(0, state.cursor - 1);
+          moveCursor(-1);
         }
-        ensureCursorVisible();
         return { type: "none" };
       }
       if (matchesKey(data, Key.pageDown)) {
         if (state.mode === "select") {
-          state.selectEnd = Math.min(state.content.length - 1, state.selectEnd + state.height);
-          state.cursor = state.selectEnd;
+          for (let step = 0; step < state.height; step++) {
+            const next = stepGroup(state.selectEnd, 1);
+            if (next === null) break;
+            state.selectEnd = state.cursor = next;
+          }
+          ensureCursorVisible();
         } else {
-          state.cursor = Math.min(Math.max(0, state.content.length - 1), state.cursor + state.height);
+          moveCursorByGroups(1, state.height);
         }
         ensureCursorVisible();
         return { type: "none" };
       }
       if (matchesKey(data, Key.pageUp)) {
         if (state.mode === "select") {
-          state.selectEnd = Math.max(state.selectStart, state.selectEnd - state.height);
-          state.cursor = state.selectEnd;
+          const start = groupStart(state.selectStart);
+          for (let step = 0; step < state.height; step++) {
+            const previous = stepGroup(state.selectEnd, -1);
+            if (previous === null || previous < start) break;
+            state.selectEnd = state.cursor = previous;
+          }
+          ensureCursorVisible();
         } else {
-          state.cursor = Math.max(0, state.cursor - state.height);
+          moveCursorByGroups(-1, state.height);
         }
         ensureCursorVisible();
         return { type: "none" };
@@ -579,7 +665,7 @@ export function createViewer(
         return { type: "none" };
       }
       if (matchesKey(data, "shift+g")) {
-        state.cursor = Math.max(0, state.content.length - 1);
+        state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
         if (state.mode === "select") state.selectEnd = state.cursor;
         ensureCursorVisible();
         return { type: "none" };
@@ -594,6 +680,11 @@ export function createViewer(
         clampScroll();
         return { type: "none" };
       }
+      if (matchesKey(data, "w") && state.mode !== "select") {
+        state.wordWrap = !state.wordWrap;
+        state.lastRenderWidth = 0;
+        return { type: "none" };
+      }
       if (matchesKey(data, "d") && state.mode !== "select" && state.file.gitStatus && !isUntrackedStatus(state.file.gitStatus)) {
         state.diffMode = !state.diffMode;
         state.lastRenderWidth = 0;
@@ -601,7 +692,7 @@ export function createViewer(
         state.cursor = 0;
         return { type: "none" };
       }
-      if (matchesKey(data, "m") && state.mode !== "select" && state.mode !== "comment") {
+      if (matchesKey(data, "m") && state.mode !== "select") {
         toggleMarkdownMode();
         return { type: "none" };
       }
@@ -610,8 +701,8 @@ export function createViewer(
           setMode("normal");
           return { type: "none" };
         }
-        if (state.mode === "comment") return { type: "none" };
         switchMarkdownToRaw();
+        state.cursor = groupStart(state.cursor);
         state.mode = "select";
         state.selectStart = state.cursor;
         state.selectEnd = state.cursor;

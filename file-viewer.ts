@@ -12,6 +12,12 @@ type UnifiedDiffLine = {
   text: string;
 };
 
+export type RenderedLines = {
+  lines: string[];
+  rowGroups: number[];
+  logicalLines: string[];
+};
+
 function parseUnifiedDiff(diffOutput: string): UnifiedDiffLine[] {
   const lines: UnifiedDiffLine[] = [];
   let oldLine = 0;
@@ -47,45 +53,59 @@ function parseUnifiedDiff(diffOutput: string): UnifiedDiffLine[] {
   return lines;
 }
 
-function wrapUnifiedDiffLine(line: string, width: number): string[] {
+function wrapUnifiedDiffLine(line: string, width: number, wordWrap: boolean): string[] {
+  if (!wordWrap) return [line];
   const separatorIndex = line.indexOf("│");
   if (separatorIndex === -1 || width <= 0) return wrapTextWithAnsi(line, width);
 
   const prefix = line.slice(0, separatorIndex + 2);
   const contentWidth = Math.max(width - visibleWidth(prefix), 1);
   const content = line.slice(separatorIndex + 2);
-  const continuationPrefix = prefix.replace(/\d/g, " ");
+  const continuationPrefix = prefix.replace(/\x1b\[[0-?]*[ -/]*[@-~]|\d/g, token => token.startsWith("\x1b") ? token : " ");
   return wrapTextWithAnsi(content, contentWidth).map((chunk, index) =>
     (index === 0 ? prefix : continuationPrefix) + chunk
   );
 }
 
-function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme): string[] {
+function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme, wordWrap: boolean): RenderedLines {
   const parsed = parseUnifiedDiff(diffOutput);
-  if (parsed.length === 0) return stripLeadingEmptyLines(diffOutput.split("\n"));
+  if (parsed.length === 0) {
+    const lines = stripLeadingEmptyLines(diffOutput.split("\n"));
+    return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines };
+  }
 
   const lineNumberWidth = String(Math.max(...parsed.map(line => line.lineNumber))).length;
-  return parsed.flatMap(({ kind, lineNumber, text }) => {
+  const lines: string[] = [];
+  const rowGroups: number[] = [];
+  const logicalLines: string[] = [];
+  for (const [group, { kind, lineNumber, text }] of parsed.entries()) {
     const marker = kind === "add" ? "+" : kind === "remove" ? "-" : " ";
     const color =
       kind === "add" ? "toolDiffAdded" : kind === "remove" ? "toolDiffRemoved" : "toolDiffContext";
     const rendered = theme.fg(color, `${marker} ${String(lineNumber).padStart(lineNumberWidth)} │ ${text}`);
-    return wrapUnifiedDiffLine(rendered, width);
-  });
+    logicalLines.push(rendered);
+    const wrapped = wrapUnifiedDiffLine(rendered, width, wordWrap);
+    lines.push(...wrapped);
+    rowGroups.push(...wrapped.map(() => group));
+  }
+  return { lines, rowGroups, logicalLines };
+}
+export interface LoadedFileContent extends RenderedLines {
+  renderedMarkdown: boolean;
 }
 
-export interface LoadedFileContent {
-  lines: string[];
-  renderedMarkdown: boolean;
+export interface LoadFileContentOptions {
+  cwd: string;
+  diffMode: boolean;
+  hasChanges: boolean;
+  width?: number;
+  renderMarkdown: boolean;
+  wordWrap: boolean;
 }
 
 export function loadFileContent(
   filePath: string,
-  cwd: string,
-  diffMode: boolean,
-  hasChanges: boolean,
-  width?: number,
-  renderMarkdown = true,
+  { cwd, diffMode, hasChanges, width, renderMarkdown, wordWrap }: LoadFileContentOptions,
   theme: Theme
 ): LoadedFileContent {
   const isMarkdown = isMarkdownPath(filePath);
@@ -94,7 +114,7 @@ export function loadFileContent(
   try {
     try {
       if (statSync(filePath).isDirectory()) {
-        return ["Directory selected - expand it in the file tree instead of opening it."];
+        return { lines: ["Directory selected - expand it in the file tree instead of opening it."], rowGroups: [0], logicalLines: ["Directory selected - expand it in the file tree instead of opening it."], renderedMarkdown: false };
       }
     } catch {
       // Ignore stat errors and fall through to normal handling
@@ -124,36 +144,38 @@ export function loadFileContent(
         }
 
         if (!diffOutput.trim()) {
-          return { lines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false };
+          return { lines: ["No diff available - file may be untracked or unchanged"], rowGroups: [0], logicalLines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false };
         }
 
-        return {
-          lines: renderUnifiedDiff(diffOutput, termWidth, theme),
-          renderedMarkdown: false,
-        };
+        return { ...renderUnifiedDiff(diffOutput, termWidth, theme, wordWrap), renderedMarkdown: false };
       } catch (e: any) {
-        return { lines: [`Diff error: ${e.message}`], renderedMarkdown: false };
+        return { lines: [`Diff error: ${e.message}`], rowGroups: [0], logicalLines: [`Diff error: ${e.message}`], renderedMarkdown: false };
       }
     }
 
     if (isMarkdown && renderMarkdown) {
       const markdown = new Markdown(readFileSync(filePath, "utf-8"), 0, 0, getMarkdownTheme());
-      return { lines: markdown.render(termWidth), renderedMarkdown: true };
+      const lines = markdown.render(wordWrap ? termWidth : 10_000).map(line => line.trimEnd());
+      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: true };
     }
 
     const raw = readFileSync(filePath, "utf-8");
     const lineNumberWidth = Math.max(4, String(raw.split("\n").length).length);
     const contentWidth = Math.max(1, termWidth - lineNumberWidth - 3);
     const highlighted = highlightCode(raw, getLanguageFromPath(filePath));
-    const lines = highlighted.flatMap((line, index) => {
-      const lineNumber = theme.fg("dim", String(index + 1).padStart(lineNumberWidth));
+    const lines: string[] = [];
+    const rowGroups: number[] = [];
+    for (const [group, line] of highlighted.entries()) {
+      const lineNumber = theme.fg("dim", String(group + 1).padStart(lineNumberWidth));
       const continuation = " ".repeat(lineNumberWidth);
-      return wrapTextWithAnsi(line, contentWidth).map((segment, segmentIndex) =>
-        `${segmentIndex === 0 ? lineNumber : continuation} │ ${segment}`
-      );
-    });
-    return { lines, renderedMarkdown: false };
+      const wrapped = wordWrap ? wrapTextWithAnsi(line, contentWidth) : [line];
+      lines.push(...wrapped.map((segment, segmentIndex) =>
+        `${segmentIndex === 0 ? lineNumber : continuation}${theme.fg("borderMuted", " │ ")}${segment}`
+      ));
+      rowGroups.push(...wrapped.map(() => group));
+    }
+    return { lines, rowGroups, logicalLines: raw.split("\n"), renderedMarkdown: false };
   } catch (e: any) {
-    return { lines: [`Error loading file: ${e.message}`], renderedMarkdown: false };
+    return { lines: [`Error loading file: ${e.message}`], rowGroups: [0], logicalLines: [`Error loading file: ${e.message}`], renderedMarkdown: false };
   }
 }
