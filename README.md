@@ -8,10 +8,7 @@ Forked from [tmustier/pi-extensions — files-widget](https://github.com/tmustie
 
 Directory symlinks are shown with a `↗` marker and can be expanded like normal folders.
 
-<video controls autoplay loop muted playsinline>
-  <source src="demo.mp4" type="video/mp4" />
-</video>
-
+![File browser overlay](demo.png)
 ## Install
 
 **Quick install (Pi package manager):**
@@ -34,7 +31,16 @@ pi install npm:pi-files-widget-overlay
 - Pi built-in syntax highlighter: code colors follow the active Pi theme
 - Pi built-in Markdown renderer: rendered Markdown follows the active Pi theme
 
-The `/readfiles` browser has no external runtime dependency; code and Markdown use Pi's theme-aware renderers.
+The `/readfiles` browser has no `bat`, `glow`, or `delta` runtime dependency. Code, Markdown, and unified diffs use Pi's theme-aware renderers; Diff mode uses `git` when available.
+
+## Development
+
+```bash
+npm install
+npm test
+npm run typecheck
+```
+
 ## Commands
 
 - `/readfiles` - open the file browser as a floating overlay in the current directory
@@ -50,6 +56,7 @@ Diff viewing is built into the file viewer: open a changed tracked file and pres
 - `h/l` or `←/→`: collapse/expand folder
 - `PgUp/PgDn`: page up/down
 - `c`: toggle changed-only view
+- `C`: toggle the expanded changed view; enabling it expands every directory containing changes
 - `]` / `[`: next/prev changed file
 - `/`: search (type to filter, `Esc` to exit)
 - `u`: go up one directory (re-root to parent)
@@ -59,11 +66,12 @@ Diff viewing is built into the file viewer: open a changed tracked file and pres
 
 ## Viewer Keybindings
 
-- `j/k` or `↑/↓`: scroll
+- `j/k` or `↑/↓`: move the line cursor (the viewport follows it)
 - `PgUp/PgDn`: page up/down
 - `g/G`: top/bottom
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files
+- `w`: toggle word wrap (disabled by default)
 - `/`: search (type to search)
 - `n` / `N`: next/prev match
 - `v`: select mode (line selection)
@@ -72,10 +80,11 @@ Diff viewing is built into the file viewer: open a changed tracked file and pres
 - `Ctrl+Enter` or `Ctrl+D`: send the comment (`Alt+Enter` also works when supported)
 - `]` / `[`: next/prev changed file
 - `+` / `-`: increase/decrease viewer height
-- `q`: back to browser
+- `q`, `Esc`, or `←`: back to browser
 
 ## Notes
 
+- Hidden project files and directories such as `.pi/` and `.github/` are visible; `.git/` and common dependency/build caches remain hidden.
 - Untracked files show as `[UNTRACKED]` and open in normal view.
 - Searching in rendered Markdown switches to raw mode first, and selecting from rendered Markdown first switches you back to raw so line-based matches and comments stay aligned with the source file.
 - When you browse outside the current project directory, inline comments on those files use absolute paths so the agent can still locate them. Files inside the project continue to use project-relative paths.
