@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -52,6 +52,9 @@ async function createNestedRepository(): Promise<string> {
   return directory;
 }
 
+function waitForBackgroundWork(): Promise<void> {
+  return new Promise(resolve => setTimeout(resolve, 75));
+}
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
 });
@@ -96,6 +99,37 @@ describe("file browser expanded changed view", () => {
     expect(getGitFileList(subdirectory)).toContain("nested/changed.ts");
     expect(getGitStatus(subdirectory).get("nested/changed.ts")).toBe("M");
     expect(getGitDiffStats(subdirectory).get("nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
+  });
+
+  it("discards scans queued for a previous root", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(parent);
+    const oldRoot = join(parent, "old");
+    await mkdir(oldRoot);
+    await writeFile(join(oldRoot, "stale.ts"), "export const stale = true;\n");
+    await writeFile(join(parent, "fresh.ts"), "export const fresh = true;\n");
+    const browser = createFileBrowser(oldRoot, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.handleInput("u");
+    await rm(oldRoot, { recursive: true, force: true });
+    await waitForBackgroundWork();
+
+    const rendered = browser.render(100).join("\n");
+    expect(rendered).toContain("fresh.ts");
+    expect(rendered).not.toContain("stale.ts");
+  });
+
+  it("terminates ancestor symlink cycles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await symlink(".", join(root, "loop"), "dir");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    await waitForBackgroundWork();
+    expect(browser.render(100).join("\n")).toContain("loop");
+    browser.handleInput("l");
+    await waitForBackgroundWork();
+    expect(browser.render(100).join("\n")).toContain("loop");
   });
 
   it("enters first children with right input and collapses parents with left input", async () => {

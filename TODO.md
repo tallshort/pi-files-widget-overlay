@@ -21,8 +21,8 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Performance and reliability
 
 - [x] Add reproducible large Git and non-Git tree benchmarks covering time-to-first-usable-render, input latency, scan completion, and LOC batching; record a baseline before tuning.
-- [ ] Verify re-rooting discards stale directory-scan and LOC results.
-- [ ] Verify ancestor symlink cycles terminate safely.
+- [x] Verify re-rooting discards stale directory-scan and LOC results.
+- [x] Verify ancestor symlink cycles terminate safely.
 - [x] Verify Git status, stats, and diffs use correct paths from repository subdirectories.
 - [x] Add coverage for wrapped lines, logical-line navigation, selection, comments, Diff search, and Diff comment ranges.
 - [x] Add coverage for rendered-to-raw Markdown selection boundaries and rendered Markdown word-wrap toggling.
