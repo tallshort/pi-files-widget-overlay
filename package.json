@@ -1,0 +1,32 @@
+{
+  "name": "pi-files-widget-overlay",
+  "version": "0.2.0",
+  "description": "In-terminal file browser, viewer, and diff overlay for Pi.",
+  "license": "MIT",
+  "author": "tallshort",
+  "keywords": [
+    "pi-package"
+  ],
+  "repository": {
+    "type": "git",
+    "url": "git+https://github.com/tallshort/pi-files-widget-overlay.git"
+  },
+  "bugs": "https://github.com/tallshort/pi-files-widget-overlay/issues",
+  "homepage": "https://github.com/tallshort/pi-files-widget-overlay#readme",
+  "peerDependencies": {
+    "@earendil-works/pi-coding-agent": "*",
+    "@earendil-works/pi-tui": "*"
+  },
+  "scripts": {
+    "postinstall": "node -e \"console.log('pi-files-widget-overlay: optional dependency: bat. Install with: brew install bat')\""
+  },
+  "pi": {
+    "extensions": [
+      "index.ts"
+    ]
+  },
+  "devDependencies": {
+    "@earendil-works/pi-coding-agent": "^0.80.3",
+    "@earendil-works/pi-tui": "^0.80.3"
+  }
+}

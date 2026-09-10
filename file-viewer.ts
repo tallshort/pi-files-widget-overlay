@@ -1,0 +1,159 @@
+import { getLanguageFromPath, getMarkdownTheme, highlightCode, type Theme } from "@earendil-works/pi-coding-agent";
+import { Markdown, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { execSync } from "node:child_process";
+import { readFileSync, statSync } from "node:fs";
+
+import { isGitRepo } from "./git";
+import { isMarkdownPath, stripLeadingEmptyLines } from "./utils";
+
+type UnifiedDiffLine = {
+  kind: "add" | "remove" | "context";
+  lineNumber: number;
+  text: string;
+};
+
+function parseUnifiedDiff(diffOutput: string): UnifiedDiffLine[] {
+  const lines: UnifiedDiffLine[] = [];
+  let oldLine = 0;
+  let newLine = 0;
+  let inHunk = false;
+
+  for (const rawLine of diffOutput.split("\n")) {
+    const hunk = rawLine.match(/^@@ -(\d+)(?:,\d+)? \+(\d+)(?:,\d+)? @@/);
+    if (hunk) {
+      oldLine = Number(hunk[1]);
+      newLine = Number(hunk[2]);
+      inHunk = true;
+      continue;
+    }
+    if (!inHunk || rawLine.startsWith("\\ No newline at end of file")) continue;
+
+    const text = rawLine.slice(1);
+    switch (rawLine[0]) {
+      case " ":
+        lines.push({ kind: "context", lineNumber: newLine, text });
+        oldLine++;
+        newLine++;
+        break;
+      case "-":
+        lines.push({ kind: "remove", lineNumber: oldLine++, text });
+        break;
+      case "+":
+        lines.push({ kind: "add", lineNumber: newLine++, text });
+        break;
+    }
+  }
+
+  return lines;
+}
+
+function wrapUnifiedDiffLine(line: string, width: number): string[] {
+  const separatorIndex = line.indexOf("│");
+  if (separatorIndex === -1 || width <= 0) return wrapTextWithAnsi(line, width);
+
+  const prefix = line.slice(0, separatorIndex + 2);
+  const contentWidth = Math.max(width - visibleWidth(prefix), 1);
+  const content = line.slice(separatorIndex + 2);
+  const continuationPrefix = prefix.replace(/\d/g, " ");
+  return wrapTextWithAnsi(content, contentWidth).map((chunk, index) =>
+    (index === 0 ? prefix : continuationPrefix) + chunk
+  );
+}
+
+function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme): string[] {
+  const parsed = parseUnifiedDiff(diffOutput);
+  if (parsed.length === 0) return stripLeadingEmptyLines(diffOutput.split("\n"));
+
+  const lineNumberWidth = String(Math.max(...parsed.map(line => line.lineNumber))).length;
+  return parsed.flatMap(({ kind, lineNumber, text }) => {
+    const marker = kind === "add" ? "+" : kind === "remove" ? "-" : " ";
+    const color =
+      kind === "add" ? "toolDiffAdded" : kind === "remove" ? "toolDiffRemoved" : "toolDiffContext";
+    const rendered = theme.fg(color, `${marker} ${String(lineNumber).padStart(lineNumberWidth)} │ ${text}`);
+    return wrapUnifiedDiffLine(rendered, width);
+  });
+}
+
+export interface LoadedFileContent {
+  lines: string[];
+  renderedMarkdown: boolean;
+}
+
+export function loadFileContent(
+  filePath: string,
+  cwd: string,
+  diffMode: boolean,
+  hasChanges: boolean,
+  width?: number,
+  renderMarkdown = true,
+  theme: Theme
+): LoadedFileContent {
+  const isMarkdown = isMarkdownPath(filePath);
+  const termWidth = width || process.stdout.columns || 80;
+
+  try {
+    try {
+      if (statSync(filePath).isDirectory()) {
+        return ["Directory selected - expand it in the file tree instead of opening it."];
+      }
+    } catch {
+      // Ignore stat errors and fall through to normal handling
+    }
+
+    if (diffMode && hasChanges && isGitRepo(cwd)) {
+      try {
+        // Try different diff strategies
+        let diffOutput = "";
+
+        // First try: unstaged changes
+        const unstaged = execSync(`git diff --no-color -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+        if (unstaged.trim()) {
+          diffOutput = unstaged;
+        } else {
+          // Second try: staged changes
+          const staged = execSync(`git diff --no-color --cached -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+          if (staged.trim()) {
+            diffOutput = staged;
+          } else {
+            // Third try: diff against HEAD (for new files that are staged)
+            const headDiff = execSync(`git diff --no-color HEAD -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+            if (headDiff.trim()) {
+              diffOutput = headDiff;
+            }
+          }
+        }
+
+        if (!diffOutput.trim()) {
+          return { lines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false };
+        }
+
+        return {
+          lines: renderUnifiedDiff(diffOutput, termWidth, theme),
+          renderedMarkdown: false,
+        };
+      } catch (e: any) {
+        return { lines: [`Diff error: ${e.message}`], renderedMarkdown: false };
+      }
+    }
+
+    if (isMarkdown && renderMarkdown) {
+      const markdown = new Markdown(readFileSync(filePath, "utf-8"), 0, 0, getMarkdownTheme());
+      return { lines: markdown.render(termWidth), renderedMarkdown: true };
+    }
+
+    const raw = readFileSync(filePath, "utf-8");
+    const lineNumberWidth = Math.max(4, String(raw.split("\n").length).length);
+    const contentWidth = Math.max(1, termWidth - lineNumberWidth - 3);
+    const highlighted = highlightCode(raw, getLanguageFromPath(filePath));
+    const lines = highlighted.flatMap((line, index) => {
+      const lineNumber = theme.fg("dim", String(index + 1).padStart(lineNumberWidth));
+      const continuation = " ".repeat(lineNumberWidth);
+      return wrapTextWithAnsi(line, contentWidth).map((segment, segmentIndex) =>
+        `${segmentIndex === 0 ? lineNumber : continuation} │ ${segment}`
+      );
+    });
+    return { lines, renderedMarkdown: false };
+  } catch (e: any) {
+    return { lines: [`Error loading file: ${e.message}`], renderedMarkdown: false };
+  }
+}

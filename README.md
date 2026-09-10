@@ -1,0 +1,85 @@
+# pi-files-widget-overlay
+
+In-terminal floating-overlay file browser and diff viewer for Pi. Navigate files, view diffs, select code, and send comments to the agent without leaving the terminal and without interrupting your agent.
+
+## Origin
+
+Forked from [tmustier/pi-extensions — files-widget](https://github.com/tmustier/pi-extensions/tree/main/files-widget), distributed under the MIT License. Modifications and overlay-focused maintenance are by tallshort.
+
+Directory symlinks are shown with a `↗` marker and can be expanded like normal folders.
+
+<video controls autoplay loop muted playsinline>
+  <source src="demo.mp4" type="video/mp4" />
+</video>
+
+## Install
+
+**Quick install (Pi package manager):**
+
+```bash
+pi install npm:pi-files-widget-overlay
+```
+
+**Local development:** add the repository path to `~/.pi/agent/settings.json`:
+
+```json
+{
+  "extensions": [
+    "~/pi-files-widget-overlay"
+  ]
+}
+```
+## Dependencies
+
+- Pi built-in syntax highlighter: code colors follow the active Pi theme
+- Pi built-in Markdown renderer: rendered Markdown follows the active Pi theme
+
+The `/readfiles` browser has no external runtime dependency; code and Markdown use Pi's theme-aware renderers.
+## Commands
+
+- `/readfiles` - open the file browser as a floating overlay in the current directory
+- `/readfiles <path>` - open the floating browser rooted at `<path>` (absolute, relative, or `~`-prefixed)
+
+The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header separates the browser from the agent transcript; `q` or `Esc` closes it and returns focus to Pi.
+Diff viewing is built into the file viewer: open a changed tracked file and press `d` to toggle the git diff view.
+
+## Browser Keybindings
+
+- `j/k` or `↑/↓`: move
+- `Enter`: open file / expand folder
+- `h/l` or `←/→`: collapse/expand folder
+- `PgUp/PgDn`: page up/down
+- `c`: toggle changed-only view
+- `]` / `[`: next/prev changed file
+- `/`: search (type to filter, `Esc` to exit)
+- `u`: go up one directory (re-root to parent)
+- `.`: jump back to the starting directory
+- `+` / `-`: increase/decrease browser height
+- `q`: close
+
+## Viewer Keybindings
+
+- `j/k` or `↑/↓`: scroll
+- `PgUp/PgDn`: page up/down
+- `g/G`: top/bottom
+- `d`: toggle diff (tracked files only)
+- `m`: toggle rendered/raw view for Markdown files
+- `/`: search (type to search)
+- `n` / `N`: next/prev match
+- `v`: select mode (line selection)
+- `c`: comment on selected lines (inline prompt)
+- `Enter`: new line in the comment editor
+- `Ctrl+Enter` or `Ctrl+D`: send the comment (`Alt+Enter` also works when supported)
+- `]` / `[`: next/prev changed file
+- `+` / `-`: increase/decrease viewer height
+- `q`: back to browser
+
+## Notes
+
+- Untracked files show as `[UNTRACKED]` and open in normal view.
+- Searching in rendered Markdown switches to raw mode first, and selecting from rendered Markdown first switches you back to raw so line-based matches and comments stay aligned with the source file.
+- When you browse outside the current project directory, inline comments on those files use absolute paths so the agent can still locate them. Files inside the project continue to use project-relative paths.
+- Folder LOCs are shown only when the folder is collapsed (expanded folders would duplicate counts).
+- Line counts load asynchronously; the header shows activity while counts are computed.
+- Large non-git folders load progressively and may show `[partial]` while loading in safe mode.
+- Git status refreshes every 3 seconds while `/readfiles` is open.
