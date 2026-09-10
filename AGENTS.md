@@ -26,4 +26,3 @@
 - Keep `package.json` → `pi.extensions` pointing at the runtime entry point.
 - Before publishing, run `npm pack --dry-run`; the package must exclude `test/`, `docs/`, and `benchmarks/`.
 - Keep commits single-purpose; fold small follow-ups into their owning change when that preserves a clearer release history.
-- Before committing, inspect `git status` and stage only files that belong to the change; leave unrelated untracked files untouched.
