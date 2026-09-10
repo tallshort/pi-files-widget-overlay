@@ -13,5 +13,19 @@ export const DEFAULT_BROWSER_HEIGHT = 28;
 export const MIN_PANEL_HEIGHT = 5;
 export const MAX_VIEWER_HEIGHT = 50;
 export const MAX_BROWSER_HEIGHT = 40;
+export const INITIAL_PANEL_HEIGHT_RATIO = 0.85;
+export const OVERLAY_MAX_HEIGHT_RATIO = 0.95;
+export const OVERLAY_MAX_HEIGHT = "95%";
+
+export function getResponsivePanelHeight(
+  fallback: number,
+  maximum: number,
+  chromeRows: number,
+  terminalRows = process.stdout.rows,
+  ratio = INITIAL_PANEL_HEIGHT_RATIO
+): number {
+  if (!terminalRows || terminalRows <= 0) return fallback;
+  return Math.min(maximum, Math.max(MIN_PANEL_HEIGHT, Math.floor(terminalRows * ratio) - chromeRows));
+}
 
 export const SEARCH_SCROLL_OFFSET = 3;

@@ -84,6 +84,7 @@ Diff viewing is built into the file viewer: open a changed tracked file and pres
 
 ## Notes
 
+- The overlay maximum height is 95% of the terminal; browser and viewer panels start at 85%, and `+` / `-` adjust within that available range.
 - Hidden project files and directories such as `.pi/` and `.github/` are visible; `.git/` and common dependency/build caches remain hidden.
 - Untracked files show as `[UNTRACKED]` and open in normal view.
 - Searching in rendered Markdown switches to raw mode first, and selecting from rendered Markdown first switches you back to raw so line-based matches and comments stay aligned with the source file.

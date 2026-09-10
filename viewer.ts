@@ -5,6 +5,8 @@ import { relative } from "node:path";
 
 import {
   DEFAULT_VIEWER_HEIGHT,
+  getResponsivePanelHeight,
+  OVERLAY_MAX_HEIGHT_RATIO,
   MAX_VIEWER_HEIGHT,
   MIN_PANEL_HEIGHT,
   SEARCH_SCROLL_OFFSET,
@@ -94,7 +96,7 @@ export function createViewer(
     searchIndex: 0,
     lastRenderWidth: 0,
     lastLoadedMtimeMs: null,
-    height: DEFAULT_VIEWER_HEIGHT,
+    height: getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8),
   };
 
   function isMarkdownFile(): boolean {
@@ -671,7 +673,8 @@ export function createViewer(
         return { type: "none" };
       }
       if (matchesKey(data, "+") || matchesKey(data, "=")) {
-        state.height = Math.min(MAX_VIEWER_HEIGHT, state.height + 5);
+        const maximumHeight = getResponsivePanelHeight(MAX_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8, process.stdout.rows, OVERLAY_MAX_HEIGHT_RATIO);
+        state.height = Math.min(maximumHeight, state.height + 5);
         clampScroll();
         return { type: "none" };
       }

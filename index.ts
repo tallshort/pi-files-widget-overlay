@@ -11,7 +11,7 @@ import { statSync } from "node:fs";
 import { homedir } from "node:os";
 import { isAbsolute, join, resolve } from "node:path";
 
-import { POLL_INTERVAL_MS } from "./constants";
+import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
 import { getObservedToolActivityPath } from "./activity";
 
@@ -100,7 +100,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
             return truncated + " ".repeat(Math.max(0, innerWidth - visibleWidth(truncated)));
           };
           const border = (character: string) => theme.fg("border", character);
-          const header = padLine(theme.bold(" Files "));
+          const header = padLine(theme.fg("accent", theme.bold(" Files ")));
 
           return [
             border(`┌${"─".repeat(innerWidth)}┐`),
@@ -124,6 +124,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
         overlayOptions: {
           anchor: "center",
           width: "95%",
+          maxHeight: OVERLAY_MAX_HEIGHT,
           margin: 1,
         },
       });

@@ -7,6 +7,8 @@ import { join, relative, resolve, sep } from "node:path";
 
 import {
   DEFAULT_BROWSER_HEIGHT,
+  getResponsivePanelHeight,
+  OVERLAY_MAX_HEIGHT_RATIO,
   LINE_COUNT_BATCH_DELAY_MS,
   LINE_COUNT_BATCH_SIZE,
   MAX_BROWSER_HEIGHT,
@@ -1169,7 +1171,8 @@ export function createFileBrowser(
       return;
     }
     if (matchesKey(data, "+") || matchesKey(data, "=")) {
-      browser.browserHeight = Math.min(MAX_BROWSER_HEIGHT, browser.browserHeight + 5);
+      const maximumHeight = getResponsivePanelHeight(MAX_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9, process.stdout.rows, OVERLAY_MAX_HEIGHT_RATIO);
+      browser.browserHeight = Math.min(maximumHeight, browser.browserHeight + 5);
       return;
     }
     if (matchesKey(data, "-") || matchesKey(data, "_")) {

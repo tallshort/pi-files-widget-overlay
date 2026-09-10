@@ -7,6 +7,7 @@ import { promisify } from "node:util";
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
+import { getResponsivePanelHeight, OVERLAY_MAX_HEIGHT_RATIO } from "./constants.ts";
 import { loadFileContent } from "./file-viewer.ts";
 import { createViewer, type CommentPayload } from "./viewer.ts";
 const execFile = promisify(execFileCallback);
@@ -49,6 +50,13 @@ afterEach(async () => {
 });
 
 describe("file viewer word wrapping", () => {
+  it("derives initial and maximum panel heights from terminal rows", () => {
+    expect(getResponsivePanelHeight(28, 40, 9, 24)).toBe(11);
+    expect(getResponsivePanelHeight(29, 50, 8, 60)).toBe(43);
+    expect(getResponsivePanelHeight(50, 50, 8, 24, OVERLAY_MAX_HEIGHT_RATIO)).toBe(14);
+    expect(getResponsivePanelHeight(28, 40, 9, 0)).toBe(28);
+  });
+
   it("keeps confirmed searches available to n and N", async () => {
     const filePath = await createSourceFile("needle one\nother\nneedle two\n");
     const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
@@ -65,7 +73,6 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("N");
     expect(viewer.render(80)[0]).toContain("[1/2]");
   });
-
   it("groups every visual row produced by one wrapped source line", async () => {
     const filePath = await createSourceFile();
 
