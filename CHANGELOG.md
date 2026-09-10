@@ -14,6 +14,7 @@ All notable changes to this extension will be documented in this file.
 - Schedule Git line counts by expanded directory instead of queueing every tracked file at startup.
 - Keep confirmed file-viewer searches available to `n` and `N`.
 - Track observed `edit.file` activity alongside `write.path` using normalized paths.
+- Show non-blocking directory-scan and Git-metadata errors in the browser; verify Git metadata paths from repository subdirectories.
 
 ### Added
 - Add Vitest coverage for wrapped-row grouping, logical-line navigation, selection, and comments.

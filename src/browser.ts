@@ -63,6 +63,7 @@ interface BrowserState {
   expandedChangedView: boolean;
   expandedForChangedView: Set<string>;
   focusFirstChildOf: string | null;
+  errorMessage: string | null;
   browserHeight: number;
   lastPollTime: number;
 }
@@ -311,6 +312,7 @@ export function createFileBrowser(
     expandedChangedView: false,
     expandedForChangedView: new Set<string>(),
     focusFirstChildOf: null,
+    errorMessage: null,
     browserHeight: getResponsivePanelHeight(DEFAULT_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9),
     lastPollTime: Date.now(),
   };
@@ -333,6 +335,15 @@ export function createFileBrowser(
   function refreshLists(): void {
     browser.flatList = browser.root ? flattenTree(browser.root) : [];
     browser.fullList = browser.root ? flattenTree(browser.root, 0, true, true) : [];
+  }
+
+  function reportError(message: string): void {
+    browser.errorMessage ??= message;
+    requestRender();
+  }
+
+  function reportGitError(operation: string): void {
+    reportError(`${operation} unavailable`);
   }
 
   function focusFirstChild(directory: FileNode): boolean {
@@ -546,6 +557,7 @@ export function createFileBrowser(
     } catch {
       if (generation === rootGeneration) {
         node.children = [];
+        reportError(`Unable to scan ${node === browser.root ? "directory" : node.name}`);
       }
     } finally {
       if (generation === rootGeneration) {
@@ -727,8 +739,16 @@ export function createFileBrowser(
     const viewingFilePath = viewingFile?.path;
 
     if (repo) {
-      gitStatus = getGitStatus(rootPath);
-      diffStats = getGitDiffStats(rootPath);
+      let gitMetadataFailed = false;
+      const reportRefreshGitError = (operation: string) => {
+        gitMetadataFailed = true;
+        reportGitError(operation);
+      };
+      gitStatus = getGitStatus(rootPath, {}, reportRefreshGitError);
+      diffStats = getGitDiffStats(rootPath, reportRefreshGitError);
+      if (!gitMetadataFailed && browser.errorMessage?.endsWith(" unavailable")) {
+        browser.errorMessage = null;
+      }
       applyGitUpdates();
       addUntrackedNodes();
     }
@@ -762,14 +782,15 @@ export function createFileBrowser(
   function loadRoot(newRoot: string): void {
     rootGeneration += 1;
     rootPath = resolve(newRoot);
+    browser.errorMessage = null;
 
     repo = isGitRepo(rootPath);
-    gitStatus = repo ? getGitStatus(rootPath) : new Map<string, string>();
-    diffStats = repo ? getGitDiffStats(rootPath) : new Map<string, DiffStats>();
+    gitStatus = repo ? getGitStatus(rootPath, {}, reportGitError) : new Map<string, string>();
+    diffStats = repo ? getGitDiffStats(rootPath, reportGitError) : new Map<string, DiffStats>();
     gitBranch = repo ? getGitBranch(rootPath) : "";
 
     const newRootNode: FileNode = repo
-      ? buildFileTreeFromPaths(rootPath, getGitFileList(rootPath), gitStatus, diffStats, ignored, agentModifiedFiles)
+      ? buildFileTreeFromPaths(rootPath, getGitFileList(rootPath, reportGitError), gitStatus, diffStats, ignored, agentModifiedFiles)
       : {
         name: ".",
         path: rootPath,
@@ -960,13 +981,14 @@ export function createFileBrowser(
     if (lineCountPending.size > 0) activityParts.push(`${spinner} counts`);
     const activityIndicator = activityParts.length > 0 ? theme.fg("dim", ` ${activityParts.join(" ")}`) : "";
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
+    const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";
 
     const searchIndicator = browser.searchMode
       ? theme.fg("accent", `  /${browser.searchQuery}█`)
       : "";
 
     lines.push(
-      truncateToWidth(theme.bold(pathDisplay) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + searchIndicator, width)
+      truncateToWidth(theme.bold(pathDisplay) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator + searchIndicator, width)
     );
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
 

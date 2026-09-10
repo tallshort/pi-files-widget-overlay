@@ -4,6 +4,8 @@ import type { DiffStats } from "./types";
 
 const GIT_MAX_BUFFER = 32 * 1024 * 1024;
 
+type GitErrorReporter = (operation: string) => void;
+
 export function isGitRepo(cwd: string): boolean {
   try {
     execSync("git rev-parse --is-inside-work-tree", { cwd, encoding: "utf-8", timeout: 2000, stdio: "pipe" });
@@ -34,13 +36,11 @@ function stripPathPrefix(filePath: string, prefix: string): string | null {
   return null;
 }
 
-export function getGitStatus(cwd: string, options: { includeIgnored?: boolean } = {}): Map<string, string> {
+export function getGitStatus(cwd: string, options: { includeIgnored?: boolean } = {}, onError?: GitErrorReporter): Map<string, string> {
   const status = new Map<string, string>();
   try {
     const flags = ["--porcelain"];
-    if (options.includeIgnored !== false) {
-      flags.push("--ignored");
-    }
+    if (options.includeIgnored !== false) flags.push("--ignored");
     const prefix = getGitPathPrefix(cwd);
     const output = execSync(`git status ${flags.join(" ")}`, { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
     for (const line of output.split("\n")) {
@@ -50,18 +50,22 @@ export function getGitStatus(cwd: string, options: { includeIgnored?: boolean } 
       if (filePath === null || !filePath) continue;
       status.set(filePath, statusCode);
     }
-  } catch {}
+  } catch {
+    onError?.("Git status");
+  }
   return status;
 }
 
-export function getGitFileList(cwd: string): string[] {
+export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[] {
   const files = new Set<string>();
   try {
     const tracked = execSync("git ls-files -z", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
     for (const entry of tracked.split("\0")) {
       if (entry) files.add(entry);
     }
-  } catch {}
+  } catch {
+    onError?.("tracked file list");
+  }
 
   try {
     const prefix = getGitPathPrefix(cwd);
@@ -79,11 +83,11 @@ export function getGitFileList(cwd: string): string[] {
         filePath = filePath.split(" -> ").pop() || filePath;
       }
       const relPath = filePath ? stripPathPrefix(filePath, prefix)?.replace(/\/+$/, "") : null;
-      if (relPath) {
-        files.add(relPath);
-      }
+      if (relPath) files.add(relPath);
     }
-  } catch {}
+  } catch {
+    onError?.("Git status");
+  }
 
   return Array.from(files);
 }
@@ -96,7 +100,7 @@ export function getGitBranch(cwd: string): string {
   }
 }
 
-export function getGitDiffStats(cwd: string): Map<string, DiffStats> {
+export function getGitDiffStats(cwd: string, onError?: GitErrorReporter): Map<string, DiffStats> {
   const stats = new Map<string, DiffStats>();
   try {
     // Get diff stats for modified files. --relative keeps paths relative to cwd
@@ -105,32 +109,21 @@ export function getGitDiffStats(cwd: string): Map<string, DiffStats> {
     const output = execSync("git diff --relative --numstat HEAD", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
     for (const line of output.split("\n")) {
       const parts = line.split("\t");
-      if (parts.length >= 3) {
-        const additions = parseInt(parts[0], 10) || 0;
-        const deletions = parseInt(parts[1], 10) || 0;
-        const filePath = parts[2];
-        stats.set(filePath, { additions, deletions });
-      }
+      if (parts.length < 3) continue;
+      stats.set(parts[2], { additions: parseInt(parts[0], 10) || 0, deletions: parseInt(parts[1], 10) || 0 });
     }
-    // Also get stats for staged files
+
     const stagedOutput = execSync("git diff --relative --numstat --cached", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
     for (const line of stagedOutput.split("\n")) {
       const parts = line.split("\t");
-      if (parts.length >= 3) {
-        const additions = parseInt(parts[0], 10) || 0;
-        const deletions = parseInt(parts[1], 10) || 0;
-        const filePath = parts[2];
-        const existing = stats.get(filePath);
-        if (existing) {
-          stats.set(filePath, {
-            additions: existing.additions + additions,
-            deletions: existing.deletions + deletions,
-          });
-        } else {
-          stats.set(filePath, { additions, deletions });
-        }
-      }
+      if (parts.length < 3) continue;
+      const additions = parseInt(parts[0], 10) || 0;
+      const deletions = parseInt(parts[1], 10) || 0;
+      const existing = stats.get(parts[2]);
+      stats.set(parts[2], existing ? { additions: existing.additions + additions, deletions: existing.deletions + deletions } : { additions, deletions });
     }
-  } catch {}
+  } catch {
+    onError?.("Git diff statistics");
+  }
   return stats;
 }

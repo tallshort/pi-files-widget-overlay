@@ -8,7 +8,7 @@ import type { Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
-import { getGitStatus } from "../src/git.ts";
+import { getGitDiffStats, getGitFileList, getGitStatus } from "../src/git.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -87,6 +87,15 @@ describe("file browser expanded changed view", () => {
     const status = getGitStatus(root);
     expect(status.get(".pi")).toBe("??");
     expect(status.has(".pi/")).toBe(false);
+  });
+
+  it("keeps Git metadata paths relative to a repository subdirectory", async () => {
+    const root = await createChangedRepository();
+    const subdirectory = join(root, "src");
+
+    expect(getGitFileList(subdirectory)).toContain("nested/changed.ts");
+    expect(getGitStatus(subdirectory).get("nested/changed.ts")).toBe("M");
+    expect(getGitDiffStats(subdirectory).get("nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
   });
 
   it("enters first children with right input and collapses parents with left input", async () => {
