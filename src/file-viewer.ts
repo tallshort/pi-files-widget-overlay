@@ -4,7 +4,7 @@ import { execSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 
 import { isGitRepo } from "./git";
-import { isMarkdownPath, stripLeadingEmptyLines } from "./utils";
+import { isImagePath, isMarkdownPath, stripLeadingEmptyLines } from "./utils";
 
 type UnifiedDiffLine = {
   kind: "add" | "remove" | "context";
@@ -120,6 +120,14 @@ export function loadFileContent(
       // Ignore stat errors and fall through to normal handling
     }
 
+    if (isImagePath(filePath)) {
+      const size = statSync(filePath).size;
+      const lines = [
+        `Image preview is unavailable in the overlay (${(size / 1024).toFixed(1)} KiB).`,
+        "Open the file with an external image viewer instead.",
+      ];
+      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
+    }
     if (diffMode && hasChanges && isGitRepo(cwd)) {
       try {
         // Try different diff strategies

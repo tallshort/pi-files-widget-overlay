@@ -21,7 +21,7 @@ const theme = {
 const directories: string[] = [];
 
 async function createSourceFile(
-  content = "const wrapped = 'this line is intentionally long enough to wrap';\nconst next = 1;\n",
+  content: string | Uint8Array = "const wrapped = 'this line is intentionally long enough to wrap';\nconst next = 1;\n",
   fileName = "wrapped.ts"
 ): Promise<string> {
   const directory = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
@@ -85,6 +85,20 @@ describe("file viewer word wrapping", () => {
     expect(wrapped.rowGroups.at(-1)).toBe(2);
   });
 
+  it("shows an image placeholder instead of rendering binary bytes", async () => {
+    const filePath = await createSourceFile(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      "demo.png"
+    );
+
+    const loaded = loadFileContent(filePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+
+    expect(loaded.lines).toEqual([
+      "Image preview is unavailable in the overlay (0.0 KiB).",
+      "Open the file with an external image viewer instead.",
+    ]);
+    expect(loaded.logicalLines).toEqual(loaded.lines);
+  });
   it("highlights, navigates, and comments by logical source line", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];

@@ -50,6 +50,12 @@ export function isMarkdownPath(path: string): boolean {
   return path.toLowerCase().endsWith(".md");
 }
 
+const IMAGE_EXTENSIONS = new Set([".avif", ".bmp", ".gif", ".jpeg", ".jpg", ".png", ".svg", ".webp"]);
+
+export function isImagePath(path: string): boolean {
+  return IMAGE_EXTENSIONS.has(extname(path).toLowerCase());
+}
+
 export function stripLeadingEmptyLines(lines: string[]): string[] {
   let startIdx = 0;
   while (startIdx < lines.length && !lines[startIdx].trim()) {
