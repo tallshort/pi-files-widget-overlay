@@ -355,21 +355,10 @@ export function createFileBrowser(
     }
   }
 
-  function queueLineCountsForTree(rootNode: FileNode | null): void {
-    if (!rootNode) return;
-    const stack: FileNode[] = [rootNode];
-    while (stack.length > 0) {
-      const node = stack.pop();
-      if (!node) continue;
-      if (node.isDirectory) {
-        if (node.children) {
-          for (const child of node.children) {
-            stack.push(child);
-          }
-        }
-      } else {
-        queueLineCount(node);
-      }
+  function queueLineCountsForDirectory(directory: FileNode | null): void {
+    if (!directory?.children) return;
+    for (const child of directory.children) {
+      if (!child.isDirectory) queueLineCount(child);
     }
   }
 
@@ -811,7 +800,7 @@ export function createFileBrowser(
     browser.lastPollTime = Date.now();
 
     if (repo) {
-      queueLineCountsForTree(browser.root);
+      queueLineCountsForDirectory(browser.root);
     } else if (browser.root) {
       enqueueScan(browser.root, 0, true);
     }
@@ -895,6 +884,7 @@ export function createFileBrowser(
   function toggleDir(node: FileNode): void {
     if (node.isDirectory) {
       node.expanded = !node.expanded;
+      if (node.expanded && repo) queueLineCountsForDirectory(node);
       if (node.expanded && node.children === undefined) {
         enqueueScan(node, getNodeDepth(node, rootPath), true);
       }

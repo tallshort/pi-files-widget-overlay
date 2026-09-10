@@ -2,14 +2,32 @@
 
 All notable changes to this extension will be documented in this file.
 
-## Unreleased
+## [0.3.0] - 2026-09-10
+
+### Fixed
+- Highlight and select every wrapped visual row of a logical line; comments retain logical source-line ranges.
+- Make `c` and `C` share changed-only state while preserving collapsed and expanded changed-path views.
+- Preserve logical cursor and selection groups across width changes and page navigation.
+- Clear agent-modified file markers before a session switch.
+- Keep Diff searches and comments anchored to logical Diff lines across word-wrap and width changes.
+- Reset rendered Markdown selection to the first raw source line before creating a source-aligned comment.
+- Schedule Git line counts by expanded directory instead of queueing every tracked file at startup.
+- Keep confirmed file-viewer searches available to `n` and `N`.
+- Track observed `edit.file` activity alongside `write.path` using normalized paths.
+
+### Added
+- Add Vitest coverage for wrapped-row grouping, logical-line navigation, selection, and comments.
+- Add `C` to toggle the expanded changed view.
+- Add `w` to toggle word wrap in the file viewer; wrapping is disabled by default.
+- Show hidden project files such as `.pi/` and `.github/` while keeping `.git/` and common generated directories hidden.
+- Add anonymous Git and non-Git browser performance benchmarks with a recorded baseline.
 
 ### Changed
 - Forked `files-widget` as `pi-files-widget-overlay`; retain upstream MIT attribution and add tallshort copyright.
 - Replace Delta's split line-number diff renderer with a compact unified view: explicit `+`/`-` markers and one relevant line number.
 - Highlight the full width of the current line and selection; align the viewer and file-browser default overlay heights.
 - Remove the Delta runtime dependency.
-## [0.2.0] - 2026-07-04
+- Replace the README demo video with a static screenshot and add Pi Packages Gallery image metadata.
 
 ### Added
 - `/readfiles` now supports browsing outside the current working directory. Press `u` to re-root to the parent, `.` to jump back to where you started, or pass an explicit starting path (`/readfiles <path>` or `/readfiles ~/somewhere`). The browser header shows the current root so you always know where you are, and comments on files outside the project use absolute paths so the agent can still find them.
