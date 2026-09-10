@@ -7,8 +7,8 @@ import { promisify } from "node:util";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
-import { createFileBrowser } from "./browser.ts";
-import { getGitStatus } from "./git.ts";
+import { createFileBrowser } from "../src/browser.ts";
+import { getGitStatus } from "../src/git.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {

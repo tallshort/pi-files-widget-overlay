@@ -33,6 +33,13 @@ pi install npm:pi-files-widget-overlay
 
 The `/readfiles` browser has no `bat`, `glow`, or `delta` runtime dependency. Code, Markdown, and unified diffs use Pi's theme-aware renderers; Diff mode uses `git` when available.
 
+## Project layout
+
+- `src/`: extension runtime and `/readfiles` entry point
+- `test/`: browser and viewer regression tests
+- `docs/`: design notes and anonymous benchmark baselines
+- `benchmarks/`: locally run benchmark harnesses; excluded from the published package
+
 ## Development
 
 ```bash

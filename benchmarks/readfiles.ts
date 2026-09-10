@@ -5,7 +5,7 @@ import { performance } from "node:perf_hooks";
 
 import type { Theme } from "@earendil-works/pi-coding-agent";
 
-import { createFileBrowser } from "../browser.ts";
+import { createFileBrowser } from "../src/browser.ts";
 
 const RENDER_WIDTH = 160;
 const NAVIGATION_SAMPLES = 50;

@@ -34,17 +34,17 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 ## Architecture
 
 ```text
-index.ts
+src/index.ts
   └─ registers /readfiles and hosts ctx.ui.custom(..., { overlay: true })
-       └─ browser.ts
-            ├─ file-tree.ts: tree nodes, scans, symlink handling, line counts
-            ├─ git.ts: Git status, lists, stats, and repository-root translation
-            └─ viewer.ts
-                 ├─ file-viewer.ts: Pi-highlighted code, Pi Markdown, unified diff
-                 └─ comment.ts: source and diff comment message formatting
+       └─ src/browser.ts
+            ├─ src/file-tree.ts: tree nodes, scans, symlink handling, line counts
+            ├─ src/git.ts: Git status, lists, stats, and repository-root translation
+            └─ src/viewer.ts
+                 ├─ src/file-viewer.ts: Pi-highlighted code, Pi Markdown, unified diff
+                 └─ src/comment.ts: source and diff comment message formatting
 ```
 
-`index.ts` owns the overlay lifecycle and a periodic render request. `browser.ts` owns browser state, asynchronous scan generations, and routes input to `viewer.ts` while a file is open. `viewer.ts` owns cursor, viewport, selection, search, Markdown mode, comment-editor state, and viewer navigation.
+`src/index.ts` owns the overlay lifecycle and a periodic render request. `src/browser.ts` owns browser state, asynchronous scan generations, and routes input to `src/viewer.ts` while a file is open. `src/viewer.ts` owns cursor, viewport, selection, search, Markdown mode, comment-editor state, and viewer navigation.
 
 ## Rendering and dependencies
 

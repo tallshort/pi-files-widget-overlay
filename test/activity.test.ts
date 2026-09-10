@@ -2,7 +2,7 @@ import { resolve } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
-import { getObservedToolActivityPath } from "./activity.ts";
+import { getObservedToolActivityPath } from "../src/activity.ts";
 
 describe("observed tool activity paths", () => {
   const cwd = "/project";

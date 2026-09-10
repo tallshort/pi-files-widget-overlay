@@ -1,5 +1,5 @@
 .pi/
-*.test.ts
 TODO.md
-DESIGN.md
+test/
+docs/
 benchmarks/

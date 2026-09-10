@@ -24,7 +24,7 @@
   },
   "pi": {
     "extensions": [
-      "index.ts"
+      "src/index.ts"
     ],
     "image": "https://raw.githubusercontent.com/tallshort/pi-files-widget-overlay/main/demo.png"
   },
