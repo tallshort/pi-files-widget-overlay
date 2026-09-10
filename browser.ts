@@ -58,6 +58,9 @@ interface BrowserState {
   searchQuery: string;
   searchMode: boolean;
   showOnlyChanged: boolean;
+  expandedChangedView: boolean;
+  expandedForChangedView: Set<string>;
+  focusFirstChildOf: string | null;
   browserHeight: number;
   lastPollTime: number;
 }
@@ -303,7 +306,10 @@ export function createFileBrowser(
     searchQuery: "",
     searchMode: false,
     showOnlyChanged: false,
-    browserHeight: DEFAULT_BROWSER_HEIGHT,
+    expandedChangedView: false,
+    expandedForChangedView: new Set<string>(),
+    focusFirstChildOf: null,
+    browserHeight: getResponsivePanelHeight(DEFAULT_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9),
     lastPollTime: Date.now(),
   };
 
@@ -325,6 +331,15 @@ export function createFileBrowser(
   function refreshLists(): void {
     browser.flatList = browser.root ? flattenTree(browser.root) : [];
     browser.fullList = browser.root ? flattenTree(browser.root, 0, true, true) : [];
+  }
+
+  function focusFirstChild(directory: FileNode): boolean {
+    const child = directory.children?.[0];
+    if (!child) return false;
+    const index = getDisplayList().findIndex(entry => entry.node.path === child.path);
+    if (index === -1) return false;
+    browser.selectedIndex = index;
+    return true;
   }
 
   function queueLineCount(node: FileNode, force = false): void {
@@ -461,7 +476,7 @@ export function createFileBrowser(
       const files: FileNode[] = [];
 
       for (const entry of sorted) {
-        if (ignored.has(entry.name) || entry.name.startsWith(".")) continue;
+        if (ignored.has(entry.name)) continue;
         const fullPath = join(node.path, entry.name);
         const childDepth = depth + 1;
 
@@ -571,6 +586,10 @@ export function createFileBrowser(
     updateTreeStats(browser.root);
     browser.stats = getTreeStats(browser.root);
     refreshLists();
+    if (browser.focusFirstChildOf) {
+      const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
+      if (directory && focusFirstChild(directory)) browser.focusFirstChildOf = null;
+    }
     requestRender();
 
     if (scanQueue.length > 0) {
@@ -622,7 +641,7 @@ export function createFileBrowser(
 
     for (let i = 0; i < parts.length - 1; i++) {
       const part = parts[i];
-      if (ignored.has(part) || part.startsWith(".")) return null;
+      if (ignored.has(part)) return null;
       currentRel = currentRel ? `${currentRel}/${part}` : part;
       const dirPath = join(rootPath, currentRel);
       let dirNode = browser.nodeByPath.get(dirPath);
@@ -647,7 +666,7 @@ export function createFileBrowser(
     }
 
     const fileName = parts[parts.length - 1];
-    if (ignored.has(fileName) || fileName.startsWith(".")) return null;
+    if (ignored.has(fileName)) return null;
 
     const filePath = join(rootPath, normalized);
     const existing = browser.nodeByPath.get(filePath);
@@ -785,6 +804,7 @@ export function createFileBrowser(
     browser.selectedIndex = 0;
     browser.searchQuery = "";
     browser.searchMode = false;
+    browser.focusFirstChildOf = null;
     textInput.reset();
     browser.lastPollTime = Date.now();
 
@@ -880,6 +900,47 @@ export function createFileBrowser(
     }
   }
 
+  function expandChangedDirectories(node: FileNode): void {
+    if (!node.isDirectory || !node.hasChangedChildren) return;
+    if (!node.expanded) {
+      node.expanded = true;
+      browser.expandedForChangedView.add(node.path);
+    }
+    for (const child of node.children ?? []) {
+      expandChangedDirectories(child);
+    }
+  }
+
+  function restoreExpandedDirectories(node: FileNode): void {
+    if (browser.expandedForChangedView.delete(node.path)) node.expanded = false;
+    for (const child of node.children ?? []) {
+      restoreExpandedDirectories(child);
+    }
+  }
+
+  function disableExpandedChangedView(): void {
+    if (!browser.expandedChangedView) return;
+    if (browser.root) restoreExpandedDirectories(browser.root);
+    browser.expandedChangedView = false;
+    refreshLists();
+  }
+
+  function toggleExpandedChangedView(): void {
+    if (browser.expandedChangedView) {
+      disableExpandedChangedView();
+      browser.showOnlyChanged = false;
+      browser.selectedIndex = 0;
+      return;
+    }
+    if (!browser.root) return;
+    updateTreeStats(browser.root);
+    expandChangedDirectories(browser.root);
+    browser.expandedChangedView = true;
+    browser.showOnlyChanged = true;
+    browser.selectedIndex = 0;
+    refreshLists();
+  }
+
   function openFile(node: FileNode): void {
     viewer.setFile(node);
   }
@@ -970,7 +1031,7 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "j/k: nav  u: up  .: home  []: next/prev change  c: toggle changed  /: search  q: close") + changedIndicator;
+      : theme.fg("dim", "j/k: nav  u: up  .: home  c/C: toggle changed / expanded changed  []: next/prev change  /: search  q: close") + changedIndicator;
     lines.push(truncateToWidth(help, width));
 
     return lines;
@@ -1078,6 +1139,7 @@ export function createFileBrowser(
       const item = displayList[browser.selectedIndex];
       if (item?.node.isDirectory && !item.node.expanded) {
         toggleDir(item.node);
+        if (!focusFirstChild(item.node)) browser.focusFirstChildOf = item.node.path;
       } else if (item && !item.node.isDirectory) {
         openFile(item.node);
       }
@@ -1087,6 +1149,14 @@ export function createFileBrowser(
       const item = displayList[browser.selectedIndex];
       if (item?.node.isDirectory && item.node.expanded) {
         toggleDir(item.node);
+      } else {
+        const parent = item?.node.parent;
+        if (parent && parent !== browser.root && parent.expanded) {
+          parent.expanded = false;
+          refreshLists();
+          const parentIndex = getDisplayList().findIndex(entry => entry.node.path === parent.path);
+          if (parentIndex !== -1) browser.selectedIndex = parentIndex;
+        }
       }
       return;
     }
@@ -1106,8 +1176,18 @@ export function createFileBrowser(
       browser.browserHeight = Math.max(MIN_PANEL_HEIGHT, browser.browserHeight - 5);
       return;
     }
+    if (matchesKey(data, "shift+c")) {
+      toggleExpandedChangedView();
+      return;
+    }
     if (matchesKey(data, "c")) {
-      browser.showOnlyChanged = !browser.showOnlyChanged;
+      if (browser.showOnlyChanged) {
+        const wasExpanded = browser.expandedChangedView;
+        disableExpandedChangedView();
+        browser.showOnlyChanged = wasExpanded;
+      } else {
+        browser.showOnlyChanged = true;
+      }
       browser.selectedIndex = 0;
       return;
     }

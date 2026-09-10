@@ -19,6 +19,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 - `/` filters the displayed list, `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes while the overlay is open. Large non-Git trees scan progressively and display their partial state.
+- A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
 
 ### Viewer and comments
 

@@ -37,7 +37,7 @@ function compareNodes(a: FileNode, b: FileNode): number {
 }
 
 function shouldIgnoreSegment(segment: string, ignored: Set<string>): boolean {
-  return ignored.has(segment) || segment.startsWith(".");
+  return ignored.has(segment);
 }
 
 export function sortChildren(node: FileNode): void {
@@ -130,6 +130,34 @@ export function buildFileTreeFromPaths(
   directoryMap.set("", root);
   const seenFiles = new Set<string>();
 
+  function addTruncatedDirectoryPath(parts: string[]): void {
+    let current = root;
+    let relPath = "";
+
+    for (let i = 0; i < MAX_TREE_DEPTH; i++) {
+      const part = parts[i];
+      if (!part || shouldIgnoreSegment(part, ignored)) return;
+      relPath = relPath ? `${relPath}/${part}` : part;
+
+      let dirNode = directoryMap.get(relPath);
+      if (!dirNode) {
+        const depth = i + 1;
+        dirNode = {
+          name: part,
+          path: join(cwd, relPath),
+          isDirectory: true,
+          realPath: safeRealPathSync(join(cwd, relPath)),
+          parent: current,
+          children: i === MAX_TREE_DEPTH - 1 ? undefined : [],
+          expanded: depth < 1,
+          hasChangedChildren: false,
+        };
+        directoryMap.set(relPath, dirNode);
+        current.children?.push(dirNode);
+      }
+      current = dirNode;
+    }
+  }
   for (const rawPath of filePaths) {
     let normalized = rawPath.trim();
     if (!normalized) continue;
@@ -141,7 +169,13 @@ export function buildFileTreeFromPaths(
     const parts = normalized.split("/").filter(Boolean);
     if (parts.length === 0) continue;
     const dirDepth = parts.length - 1;
-    if (dirDepth > MAX_TREE_DEPTH) continue;
+    const isChangedPath = gitStatus.has(normalized) || gitStatus.has(`${normalized}/`);
+    if (dirDepth > MAX_TREE_DEPTH && !isChangedPath) {
+      // Keep a navigable prefix for deep tracked paths instead of dropping their
+      // top-level directories from the initial Git tree.
+      addTruncatedDirectoryPath(parts);
+      continue;
+    }
 
     let current = root;
     let relPath = "";

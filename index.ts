@@ -13,6 +13,7 @@ import { isAbsolute, join, resolve } from "node:path";
 
 import { POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
+import { getObservedToolActivityPath } from "./activity";
 
 function resolveInitialPath(arg: string | undefined, cwd: string): { path: string; error?: string } {
   if (!arg) return { path: cwd };
@@ -130,12 +131,8 @@ export default function editorExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("tool_result", async (event) => {
-    if (event.toolName === "write" || event.toolName === "edit") {
-      const filePath = event.input?.path as string | undefined;
-      if (filePath) {
-        agentModifiedFiles.add(join(cwd, filePath));
-      }
-    }
+    const filePath = getObservedToolActivityPath(event.toolName, event.input, cwd);
+    if (filePath) agentModifiedFiles.add(filePath);
   });
 
   pi.on("session_start", async () => {

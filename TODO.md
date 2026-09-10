@@ -32,4 +32,4 @@ This is the backlog for the current floating-overlay implementation, not the his
 
 ### Agent-awareness
 
-- [ ] Make current-session agent activity tracking complete and explicit: handle `write.path` and `edit.file`, normalize paths, and label it as observed tool activity rather than human-vs-agent provenance.
+- [x] Make current-session agent activity tracking complete and explicit: handle `write.path` and `edit.file`, normalize paths, and label it as observed tool activity rather than human-vs-agent provenance.
