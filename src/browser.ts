@@ -339,7 +339,6 @@ export function createFileBrowser(
   function activityLabels(): string[] {
     const labels: string[] = [];
     if (browser.scanState.isScanning) labels.push("… scanning");
-    if (lineCountPending.size > 0) labels.push("… counts");
     return labels;
   }
 
