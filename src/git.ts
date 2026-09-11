@@ -142,7 +142,7 @@ export function getGitBranch(cwd: string): string {
 export function getGitDiffStats(cwd: string, onError?: GitErrorReporter): Map<string, DiffStats> {
   const stats = new Map<string, DiffStats>();
   try {
-    parseGitDiffStats(runGitSync(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000), stats);
+    parseGitDiffStats(runGitSync(cwd, ["diff", "--relative", "--numstat", "-z"], 5000), stats);
     parseGitDiffStats(runGitSync(cwd, ["diff", "--relative", "--numstat", "-z", "--cached"], 5000), stats);
   } catch {
     onError?.("Git diff statistics");
@@ -173,7 +173,7 @@ export async function getGitDiffStatsAsync(cwd: string): Promise<{ stats: Map<st
   const stats = new Map<string, DiffStats>();
   try {
     const [output, stagedOutput] = await Promise.all([
-      runGit(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000),
+      runGit(cwd, ["diff", "--relative", "--numstat", "-z"], 5000),
       runGit(cwd, ["diff", "--relative", "--numstat", "-z", "--cached"], 5000),
     ]);
     parseGitDiffStats(output, stats);

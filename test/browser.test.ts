@@ -192,6 +192,15 @@ describe("file browser expanded changed view", () => {
     expect(diffStatsResult.stats.get("src/new name [renamed].ts")).toEqual({ additions: 0, deletions: 0 });
   });
 
+  it("does not double-count staged diff statistics", async () => {
+    const root = await createChangedRepository();
+    await execFile("git", ["add", "--", "src/nested/changed.ts"], { cwd: root });
+
+    expect(getGitDiffStats(root).get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
+    const result = await getGitDiffStatsAsync(root);
+    expect(result.stats.get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
+  });
+
   it("loads Git metadata asynchronously", async () => {
     const root = await createChangedRepository();
     const [statusResult, diffStatsResult, branch] = await Promise.all([getGitStatusAsync(root), getGitDiffStatsAsync(root), getGitBranchAsync(root)]);
