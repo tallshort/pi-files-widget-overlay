@@ -423,7 +423,7 @@ export function createViewer(
     if (!state.file) return "";
     const isUntracked = isUntrackedStatus(state.file.gitStatus);
 
-    let header = theme.bold(state.file.name);
+    let header = theme.bold(theme.fg("text", state.file.name));
     if (isUntracked) {
       header += theme.fg("dim", " [UNTRACKED]");
     } else if (state.diffMode) {
@@ -462,7 +462,7 @@ export function createViewer(
   }
 
   function renderCommentEditor(width: number): string[] {
-    const contentWidth = Math.max(1, width - 2);
+    const contentWidth = Math.max(1, width - 3);
     const wrappedLines: string[] = [];
     const logicalLines = state.commentText.split("\n");
 
@@ -489,7 +489,7 @@ export function createViewer(
 
     return [
       truncateToWidth(theme.fg("accent", "Comment:"), width),
-      ...visibleLines.map(line => truncateToWidth(`  ${line}`, width)),
+      ...visibleLines.map(line => truncateToWidth(`  ${theme.fg("text", line)}`, width)),
     ];
   }
 

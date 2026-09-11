@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth } from "@earendil-works/pi-tui";
+import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -201,7 +201,7 @@ function getTreeStats(root: FileNode | null): BrowserStats {
 
 function formatNodeStatus(node: FileNode, theme: Theme): string {
   if (isIgnoredStatus(node.gitStatus)) return "";
-  if (node.agentModified) return theme.fg("accent", " 🤖");
+  if (node.agentModified) return theme.fg("accent", " *");
   if (node.gitStatus === "M" || node.gitStatus === "MM") return theme.fg("warning", " M");
   if (isUntrackedStatus(node.gitStatus)) return theme.fg("dim", " ?");
   if (node.gitStatus === "A") return theme.fg("success", " A");
@@ -252,10 +252,10 @@ function formatNodeName(node: FileNode, theme: Theme): string {
   if (node.isDirectory) {
     const label = node.hasChangedChildren ? theme.fg("warning", node.name) : theme.fg("accent", node.name);
     const rendered = withSymlinkMarker(label, node, theme);
-    return node.loading ? `${rendered}${theme.fg("dim", " ⏳")}` : rendered;
+    return node.loading ? `${rendered}${theme.fg("dim", " ~")}` : rendered;
   }
   if (node.gitStatus) return withSymlinkMarker(theme.fg("warning", node.name), node, theme);
-  return withSymlinkMarker(node.name, node, theme);
+  return withSymlinkMarker(theme.fg("text", node.name), node, theme);
 }
 
 function collapseAllExcept(node: FileNode, keep: Set<FileNode>): void {
@@ -988,7 +988,7 @@ export function createFileBrowser(
       : "";
 
     lines.push(
-      truncateToWidth(theme.bold(pathDisplay) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator + searchIndicator, width)
+      truncateToWidth(theme.bold(theme.fg("text", pathDisplay)) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator + searchIndicator, width)
     );
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
@@ -1020,11 +1020,17 @@ export function createFileBrowser(
         const meta = formatNodeMeta(node, theme);
         const name = formatNodeName(node, theme);
 
-        let line = `${indent}${icon}${name}${status}${meta}`;
+        const prefix = `${indent}${icon}`;
+        const statusWidth = visibleWidth(status);
+        const metaWidth = visibleWidth(meta);
+        const availableForName = Math.max(0, width - visibleWidth(prefix) - statusWidth - metaWidth);
+        const visibleMeta = availableForName >= 3 ? meta : "";
+        const nameWidth = Math.max(0, width - visibleWidth(prefix) - statusWidth - visibleWidth(visibleMeta));
+        let line = `${prefix}${truncateToWidth(name, nameWidth, "…")}${status}${visibleMeta}`;
         line = truncateToWidth(line, width);
 
         if (isSelected) {
-          line = theme.bg("selectedBg", line);
+          line = theme.bg("selectedBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
         }
 
         lines.push(line);

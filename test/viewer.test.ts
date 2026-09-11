@@ -99,6 +99,18 @@ describe("file viewer word wrapping", () => {
     ]);
     expect(loaded.logicalLines).toEqual(loaded.lines);
   });
+
+  it("keeps the comment cursor visible at the content width boundary", async () => {
+    const filePath = await createSourceFile("const value = 1;\n");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "cursor.ts", path: filePath, isDirectory: false });
+    viewer.render(12);
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("123456789");
+
+    expect(viewer.render(12).some(line => line.includes("█"))).toBe(true);
+  });
   it("highlights, navigates, and comments by logical source line", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];

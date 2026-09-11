@@ -80,6 +80,32 @@ describe("file browser expanded changed view", () => {
 
     expect(browser.render(100).join("\n")).toContain("deep");
   });
+
+  it("fills the selected row and uses the text theme token", async () => {
+    const root = await createChangedRepository();
+    const colors: string[] = [];
+    const visualTheme = {
+      fg: (color: string, text: string) => {
+        colors.push(color);
+        return text;
+      },
+      bg: (_color: string, text: string) => `<selectedBg>${text}</selectedBg>`,
+      bold: (text: string) => text,
+    } as unknown as Theme;
+    const browser = createFileBrowser(root, new Set(), visualTheme, () => {}, () => {}, () => {});
+
+    const selected = browser.render(60).find(line => line.includes("<selectedBg>")) ?? "";
+    expect(selected.replace(/<\/?selectedBg>/g, "")).toHaveLength(60);
+    expect(colors).toContain("text");
+  });
+
+  it("keeps Git status visible when a narrow browser truncates names", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.handleInput("C");
+    expect(browser.render(12).join("\n")).toContain(" M");
+  });
   it("shows hidden project files while keeping .git internal", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
