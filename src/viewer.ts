@@ -556,6 +556,7 @@ export function createViewer(
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
       state.wordWrap = false;
+      state.pendingCount = "";
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.lastRenderWidth = 0;
@@ -573,6 +574,7 @@ export function createViewer(
       state.rawContent = "";
       state.renderMarkdown = true;
       state.wordWrap = false;
+      state.pendingCount = "";
       state.lastLoadedMtimeMs = null;
       setMode("normal");
     },
@@ -619,7 +621,7 @@ export function createViewer(
     handleInput(data: string): ViewerAction {
       if (!state.file) return { type: "none" };
       const lineJump = matchesKey(data, "shift+g");
-      if (/^\d$/.test(data) && state.mode !== "select") {
+      if (/^\d$/.test(data) && state.mode === "normal") {
         state.pendingCount += data;
         return { type: "none" };
       }

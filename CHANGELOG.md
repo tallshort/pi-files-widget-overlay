@@ -14,7 +14,7 @@ All notable changes to this extension will be documented in this file.
 ### Added
 - Show a read-only 3:7 file preview beside the browser tree on wide terminals.
 - Let preview navigation use `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` without enabling edits.
-- Support Vim-style `<count>G` jumps to source lines in the viewer and preview.
+- Support Vim-style `<count>G` jumps to logical lines in the viewer and preview.
 
 ## [0.3.0] - 2026-09-10
 

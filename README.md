@@ -77,7 +77,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 
 - `j/k` or `↑/↓`: move the line cursor (the viewport follows it)
 - `PgUp/PgDn` or `Ctrl-U/Ctrl-D`: move up/down half a page
-- `g/G`: top/bottom; `<count>G` jumps to a source line (for example, `12G`)
+- `g/G`: top/bottom; `<count>G` jumps to a logical line in the current view (for example, `12G`)
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files
 - `w`: toggle word wrap (disabled by default)

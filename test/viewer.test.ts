@@ -65,12 +65,15 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("needle");
     viewer.handleInput("\r");
     expect(viewer.render(80)[0]).toContain("[1/2]");
-
     viewer.handleInput("n");
     expect(viewer.render(80)[0]).toContain("[2/2]");
 
     viewer.handleInput("N");
     expect(viewer.render(80)[0]).toContain("[1/2]");
+
+    viewer.handleInput("/");
+    viewer.handleInput("1");
+    expect(viewer.render(80).join("\n")).toContain("/needle1");
   });
 
   it("groups every visual row produced by one wrapped source line", async () => {
@@ -107,7 +110,7 @@ describe("file viewer word wrapping", () => {
     viewer.render(12);
     viewer.handleInput("v");
     viewer.handleInput("c");
-    viewer.handleInput("123456789");
+    for (const character of "123456789") viewer.handleInput(character);
 
     expect(viewer.render(12).some(line => line.includes("█"))).toBe(true);
   });
@@ -130,6 +133,11 @@ describe("file viewer word wrapping", () => {
     const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
     preview.setFile({ name: "preview.ts", path: filePath, isDirectory: false });
     preview.render(40);
+
+    preview.handleInput("1");
+    preview.handleInput("2");
+    preview.handleInput("G");
+    expect(preview.render(40).join("\n")).toContain("12 │ const line12 = 12;");
 
     preview.handleInput("G");
     expect(preview.render(40).join("\n")).toContain("40 │ const line40 = 40;");
@@ -225,6 +233,14 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("2");
     viewer.handleInput("G");
     expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("12 │ const line11");
+
+    viewer.handleInput("1");
+    viewer.handleInput("2");
+    const replacementPath = await createSourceFile("const replacement = 1;\nconst final = 2;", "replacement.ts");
+    viewer.setFile({ name: "replacement.ts", path: replacementPath, isDirectory: false });
+    viewer.render(24);
+    viewer.handleInput("G");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("2 │ const final = 2;");
   });
 
   it("keeps a wrapped diff comment stable across widths", async () => {
