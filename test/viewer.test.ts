@@ -105,7 +105,8 @@ describe("file viewer word wrapping", () => {
 
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
-    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    const comments: string[] = [];
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
     viewer.setFile({ name: "cursor.ts", path: filePath, isDirectory: false });
     viewer.render(12);
     viewer.handleInput("v");
@@ -113,6 +114,8 @@ describe("file viewer word wrapping", () => {
     for (const character of "123456789") viewer.handleInput(character);
 
     expect(viewer.render(12).some(line => line.includes("█"))).toBe(true);
+    viewer.handleInput("\u0004");
+    expect(comments).toEqual(["123456789"]);
   });
 
   it("does not highlight a current line in a read-only preview", async () => {
