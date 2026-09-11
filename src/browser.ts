@@ -991,9 +991,10 @@ export function createFileBrowser(
       ? theme.fg("accent", `  /${browser.searchQuery}█`)
       : "";
 
-    lines.push(
-      truncateToWidth(theme.bold(theme.fg("text", pathDisplay)) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator + searchIndicator, width)
-    );
+    const header = browser.searchMode
+      ? theme.bold(theme.fg("text", searchIndicator))
+      : theme.bold(theme.fg("text", pathDisplay)) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator;
+    lines.push(truncateToWidth(header, width));
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
     const displayList = getDisplayList();

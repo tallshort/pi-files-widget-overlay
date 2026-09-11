@@ -107,6 +107,16 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(12).join("\n")).toContain(" M");
   });
 
+  it("shows the active browser search query", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.handleInput("/");
+    browser.handleInput("changed");
+
+    expect(browser.render(100).join("\n")).toContain("/changed");
+  });
+
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
