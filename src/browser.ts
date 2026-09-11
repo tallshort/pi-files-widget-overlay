@@ -203,7 +203,7 @@ function getTreeStats(root: FileNode | null): BrowserStats {
 
 function formatNodeStatus(node: FileNode, theme: Theme): string {
   if (isIgnoredStatus(node.gitStatus)) return "";
-  if (node.agentModified) return theme.fg("accent", " *");
+  if (node.agentModified) return theme.fg("accent", " 🤖");
   if (node.gitStatus === "M" || node.gitStatus === "MM") return theme.fg("warning", " M");
   if (isUntrackedStatus(node.gitStatus)) return theme.fg("dim", " ?");
   if (node.gitStatus === "A") return theme.fg("success", " A");

@@ -107,6 +107,13 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(12).join("\n")).toContain(" M");
   });
 
+  it("marks files modified by the current agent session with a robot", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set([join(root, "unchanged.ts")]), theme, () => {}, () => {}, () => {});
+
+    expect(browser.render(100).join("\n")).toContain("🤖");
+  });
+
   it("exposes the root path for the overlay title", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
