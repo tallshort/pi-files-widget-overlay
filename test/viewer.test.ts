@@ -4,6 +4,7 @@ import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
+import { CURSOR_MARKER } from "@earendil-works/pi-tui";
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
@@ -64,6 +65,7 @@ describe("file viewer word wrapping", () => {
 
     viewer.handleInput("/");
     viewer.handleInput("needle");
+    expect(viewer.render(80)[0]).toContain(CURSOR_MARKER);
     viewer.handleInput("\r");
     expect(viewer.render(80)[0]).toContain("[1/2]");
     viewer.handleInput("n");
@@ -75,8 +77,12 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("/");
     viewer.handleInput("1");
     expect(viewer.render(80).join("\n")).toContain("/needle1");
-  });
 
+    viewer.handleInput("\u001b");
+    viewer.handleInput("/");
+    viewer.handleInput("\u007f");
+    expect(viewer.render(80)[0]).not.toContain(CURSOR_MARKER);
+  });
   it("groups every visual row produced by one wrapped source line", async () => {
     const filePath = await createSourceFile();
 

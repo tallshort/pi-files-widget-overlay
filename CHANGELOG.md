@@ -5,7 +5,7 @@ All notable changes to this extension will be documented in this file.
 ## [Unreleased]
 
 ### Fixed
-- Position the browser search cursor for IME composition and let Backspace cancel an empty query.
+- Position browser and viewer search cursors for IME composition and let Backspace cancel an empty query.
 - Use stable background-activity labels instead of animated spinner frames to avoid terminal refresh artifacts.
 - Avoid double-counting staged Git diff statistics.
 

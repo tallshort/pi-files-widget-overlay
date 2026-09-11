@@ -81,7 +81,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files
 - `w`: toggle word wrap (disabled by default)
-- `/`: search (type to search)
+- `/`: search (type to search; `Esc` or `Backspace` on an empty query exits)
 - `n` / `N`: next/prev match
 - `v`: select mode (line selection)
 - `c`: comment on selected lines (inline prompt)

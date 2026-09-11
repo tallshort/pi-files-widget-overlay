@@ -26,6 +26,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - The viewer keeps a real line cursor. Navigation moves the cursor and scrolls only as needed to keep it visible; the active line is highlighted. `g`/`G` jump to the top/bottom, and a numeric prefix with `G` jumps to a logical line in the current view.
 - Word wrap is disabled by default; `w` toggles it for code, diffs, and rendered Markdown.
+- `/` opens viewer search; `Esc` or `Backspace` on an empty query cancels it.
 - `v` starts or ends selection. The selection uses the existing gutter: `▸` marks the endpoint and `┃` marks the intervening lines.
 - For Markdown, `m` toggles rendered and raw source. Searching or selecting rendered Markdown first switches to raw mode, keeping match positions and comments source-aligned. On a terminal-width change, the viewer restores the current paragraph by matching rendered text; if no match is available, it resets to the top.
 - `d` toggles the unified diff of a changed tracked file. The extension removes Git's file headers and hunk metadata before displaying selectable diff lines. Comments use the visible diff excerpt and identify it as a diff comment rather than treating display positions as source line numbers.

@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
 import { relative } from "node:path";
 
@@ -475,7 +475,7 @@ export function createViewer(
     }
 
     if (state.mode === "search") {
-      header += theme.fg("accent", `  /${state.searchQuery}█`);
+      header += theme.fg("accent", `  /${state.searchQuery}${CURSOR_MARKER}█`);
     } else if (state.searchQuery && state.searchMatches.length > 0) {
       header += theme.fg("dim", ` [${state.searchIndex + 1}/${state.searchMatches.length}]`);
     }
@@ -682,8 +682,12 @@ export function createViewer(
         } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
           setMode("normal");
         } else if (matchesKey(data, Key.backspace)) {
-          state.searchQuery = state.searchQuery.slice(0, -1);
-          updateSearchMatches();
+          if (state.searchQuery) {
+            state.searchQuery = state.searchQuery.slice(0, -1);
+            updateSearchMatches();
+          } else {
+            setMode("normal");
+          }
         } else {
           const text = searchInput.push(data);
           if (text) {
