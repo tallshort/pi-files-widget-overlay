@@ -100,8 +100,13 @@ export default function editorExtension(pi: ExtensionAPI): void {
             return truncated + " ".repeat(Math.max(0, innerWidth - visibleWidth(truncated)));
           };
           const border = (character: string) => theme.fg("border", character);
+          const activity = browser.getActivityLabel();
           const header = padLine(
-            theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ") + theme.fg("text", browser.getRootPath()) + " "
+            theme.fg("accent", theme.bold(" Files ")) +
+              theme.fg("dim", "— ") +
+              theme.fg("text", browser.getRootPath()) +
+              (activity ? theme.fg("dim", ` ${activity}`) : "") +
+              " "
           );
 
           return [

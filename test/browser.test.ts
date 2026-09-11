@@ -112,7 +112,7 @@ describe("file browser expanded changed view", () => {
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
 
     const rendered = browser.render(100).join("\n");
-    expect(rendered).toContain("… counts");
+    expect(browser.getActivityLabel()).toBe("… counts");
     expect(rendered).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
   });
 

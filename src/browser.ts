@@ -30,6 +30,7 @@ import { createTextInputBuffer } from "./input-utils";
 const MIN_PREVIEW_WIDTH = 80;
 export interface BrowserController {
   getRootPath(): string;
+  getActivityLabel(): string;
   render(width: number): string[];
   handleInput(data: string): void;
   invalidate(): void;
@@ -334,6 +335,13 @@ export function createFileBrowser(
   let gitRefreshGeneration: number | null = null;
 
   const normalizeGitPath = (path: string): string => path.split(sep).join("/");
+
+  function activityLabels(): string[] {
+    const labels: string[] = [];
+    if (browser.scanState.isScanning) labels.push("… scanning");
+    if (lineCountPending.size > 0) labels.push("… counts");
+    return labels;
+  }
 
   function refreshLists(): void {
     browser.flatList = browser.root ? flattenTree(browser.root) : [];
@@ -976,10 +984,6 @@ export function createFileBrowser(
     if (stats.additions > 0) statsDisplay += theme.fg("success", ` +${stats.additions}`);
     if (stats.deletions > 0) statsDisplay += theme.fg("error", ` -${stats.deletions}`);
 
-    const activityParts: string[] = [];
-    if (browser.scanState.isScanning) activityParts.push("… scanning");
-    if (lineCountPending.size > 0) activityParts.push("… counts");
-    const activityIndicator = activityParts.length > 0 ? theme.fg("dim", ` ${activityParts.join(" ")}`) : "";
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
     const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";
 
@@ -989,7 +993,7 @@ export function createFileBrowser(
 
     const header = browser.searchMode
       ? theme.bold(theme.fg("text", searchIndicator))
-      : branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator;
+      : branchDisplay + statsDisplay + partialIndicator + errorIndicator;
     lines.push(truncateToWidth(header, width));
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
@@ -1268,6 +1272,10 @@ export function createFileBrowser(
   return {
     getRootPath(): string {
       return formatRootPath(rootPath);
+    },
+
+    getActivityLabel(): string {
+      return activityLabels().join(" ");
     },
 
 

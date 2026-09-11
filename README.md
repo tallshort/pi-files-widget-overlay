@@ -101,6 +101,6 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - When you browse outside the current project directory, inline comments on those files use absolute paths so the agent can still locate them. Files inside the project continue to use project-relative paths.
 - Folder LOCs are shown only when the folder is collapsed (expanded folders would duplicate counts).
 - Image files display a safe placeholder in the overlay instead of attempting to render binary data. Open them in an external image viewer.
-- Line counts load asynchronously; the header shows activity while counts are computed.
+- Line counts load asynchronously; the Files title shows activity while counts are computed.
 - Large non-git folders load progressively and may show `[partial]` while loading in safe mode.
 - Git status refreshes every 3 seconds while `/readfiles` is open.
