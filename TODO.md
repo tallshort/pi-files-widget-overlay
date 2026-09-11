@@ -31,7 +31,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 - [x] Preserve the visible rendered-Markdown paragraph across resize when deterministic renderer anchors are available; otherwise document and test the fallback reset behavior.
 - [x] Add diff-view and selection coverage for staged modifications, staged-added files, and files with both staged and unstaged changes; keep untracked files in normal view.
 - [x] Add platform-neutral tests for path normalization.
-- [ ] Release blocker: add terminal key-sequence tests for every public shortcut; add OS-specific CI only for platforms declared supported in the README.
+- [x] Add terminal key-sequence tests for public navigation, editing, and modifier keys; declare macOS/Linux support and run both in CI.
 - [x] Harden Git path handling: use argument-based commands and NUL-delimited status/numstat parsing for safe special-character and rename/copy paths.
 - [x] Refresh Git metadata asynchronously, preserving responsive input and discarding stale results after re-rooting.
 - [ ] Safely identify unknown binary and terminal-control-character files before rendering; show a metadata placeholder rather than decoding or emitting unsafe bytes.

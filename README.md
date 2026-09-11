@@ -94,6 +94,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 
 ## Notes
 
+- Supported platforms: macOS and Linux terminals supported by Pi; the CI matrix runs both platforms.
 - The overlay maximum height is 95% of the terminal; browser and viewer panels start at 85%, and `+` / `-` adjust within that available range.
 - Hidden project files and directories such as `.pi/` and `.github/` are visible; `.git/` and common dependency/build caches remain hidden.
 - Untracked files show as `[UNTRACKED]` and open in normal view.

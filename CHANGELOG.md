@@ -15,6 +15,7 @@ All notable changes to this extension will be documented in this file.
 ### Changed
 - Refresh Git metadata asynchronously so periodic updates do not block overlay rendering.
 - Use argument-based Git commands and NUL-delimited metadata to preserve special-character and rename/copy paths.
+- Add terminal key-sequence coverage and macOS/Linux CI for declared supported platforms.
 ## [0.4.0] - 2026-09-11
 
 ### Fixed

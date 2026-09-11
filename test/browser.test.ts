@@ -195,7 +195,7 @@ describe("file browser expanded changed view", () => {
   it("does not double-count staged diff statistics", async () => {
     const root = await createChangedRepository();
     await execFile("git", ["add", "--", "src/nested/changed.ts"], { cwd: root });
-
+    await writeFile(join(root, "src", "nested", "changed.ts"), "export const value = 3;\n");
     expect(getGitDiffStats(root).get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
     const result = await getGitDiffStatsAsync(root);
     expect(result.stats.get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });

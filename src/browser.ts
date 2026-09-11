@@ -762,8 +762,8 @@ export function createFileBrowser(
           browser.errorMessage = null;
         }
 
-        gitStatus = statusResult.status;
-        diffStats = diffStatsResult.stats;
+        if (!statusResult.failed) gitStatus = statusResult.status;
+        if (!diffStatsResult.failed) diffStats = diffStatsResult.stats;
         gitBranch = branch;
         applyGitUpdates();
         addUntrackedNodes();
