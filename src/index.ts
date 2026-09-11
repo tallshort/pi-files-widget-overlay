@@ -100,7 +100,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
             return truncated + " ".repeat(Math.max(0, innerWidth - visibleWidth(truncated)));
           };
           const border = (character: string) => theme.fg("border", character);
-          const header = padLine(theme.fg("accent", theme.bold(" Files ")));
+          const header = padLine(
+            theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", `— ${browser.getRootPath()} `)
+          );
 
           return [
             border(`┌${"─".repeat(innerWidth)}┐`),

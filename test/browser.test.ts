@@ -107,6 +107,13 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(12).join("\n")).toContain(" M");
   });
 
+  it("exposes the root path for the overlay title", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    expect(browser.getRootPath()).toBe(root);
+  });
+
   it("shows the active browser search query", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

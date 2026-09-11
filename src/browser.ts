@@ -29,6 +29,7 @@ import { createTextInputBuffer } from "./input-utils";
 
 const MIN_PREVIEW_WIDTH = 80;
 export interface BrowserController {
+  getRootPath(): string;
   render(width: number): string[];
   handleInput(data: string): void;
   invalidate(): void;
@@ -964,7 +965,6 @@ export function createFileBrowser(
 
   function renderBrowser(width: number): string[] {
     const lines: string[] = [];
-    const pathDisplay = formatRootPath(rootPath);
     const branchDisplay = gitBranch ? theme.fg("accent", ` (${gitBranch})`) : "";
     const stats = browser.stats;
 
@@ -993,7 +993,7 @@ export function createFileBrowser(
 
     const header = browser.searchMode
       ? theme.bold(theme.fg("text", searchIndicator))
-      : theme.bold(theme.fg("text", pathDisplay)) + branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator;
+      : branchDisplay + statsDisplay + activityIndicator + partialIndicator + errorIndicator;
     lines.push(truncateToWidth(header, width));
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
@@ -1265,6 +1265,10 @@ export function createFileBrowser(
   }
 
   return {
+    getRootPath(): string {
+      return formatRootPath(rootPath);
+    },
+
     render(width: number): string[] {
       lastRenderWidth = width;
       const now = Date.now();
