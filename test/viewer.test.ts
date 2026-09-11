@@ -210,6 +210,52 @@ describe("file viewer word wrapping", () => {
     });
   });
 
+  it("renders and selects staged modifications", async () => {
+    const { root, filePath } = await createChangedFile();
+    await execFile("git", ["add", "changed.ts"], { cwd: root });
+    const comments: Array<{ payload: CommentPayload; comment: string }> = [];
+    const viewer = createViewer({ getRoot: () => root, projectCwd: root }, theme, (payload, comment) => comments.push({ payload, comment }));
+    viewer.setFile({ name: "changed.ts", path: filePath, isDirectory: false, gitStatus: "M" });
+
+    expect(viewer.render(80).join("\n")).toMatch(/\+ \d+ │ export const value = 2;/);
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("staged note");
+    viewer.handleInput("\u0004");
+
+    expect(comments[0]?.payload).toMatchObject({
+      lineRange: "diff lines 1-1",
+      selectedText: "- export const value = 1;",
+    });
+  });
+
+  it("renders staged-added files and keeps untracked files in normal view", async () => {
+    const { root } = await createChangedFile();
+    const stagedPath = join(root, "added.ts");
+    await writeFile(stagedPath, "export const added = true;\n");
+    await execFile("git", ["add", "added.ts"], { cwd: root });
+
+    const staged = loadFileContent(stagedPath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(staged.lines.join("\n")).toMatch(/\+ \d+ │ export const added = true;/);
+
+    const untrackedPath = join(root, "untracked.ts");
+    await writeFile(untrackedPath, "export const untracked = true;\n");
+    const viewer = createViewer({ getRoot: () => root, projectCwd: root }, theme, () => {});
+    viewer.setFile({ name: "untracked.ts", path: untrackedPath, isDirectory: false, gitStatus: "??" });
+    expect(viewer.render(80).join("\n")).toContain("1 │ export const untracked = true;");
+  });
+
+  it("prefers an unstaged diff when a file also has staged changes", async () => {
+    const { root, filePath } = await createChangedFile();
+    await execFile("git", ["add", "changed.ts"], { cwd: root });
+    await writeFile(filePath, "export const value = 3;\n");
+
+    const loaded = loadFileContent(filePath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    const rendered = loaded.lines.join("\n");
+    expect(rendered).toMatch(/- \d+ │ export const value = 2;/);
+    expect(rendered).toMatch(/\+ \d+ │ export const value = 3;/);
+    expect(rendered).not.toContain("export const value = 1;");
+  });
   it("resets rendered Markdown selection to a source-aligned raw line", async () => {
     const filePath = await createSourceFile("# Title\n\nThis paragraph is deliberately long enough to wrap when rendered in a narrow viewer.\n", "README.md");
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
