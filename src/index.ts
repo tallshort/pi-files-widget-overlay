@@ -101,7 +101,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
           };
           const border = (character: string) => theme.fg("border", character);
           const header = padLine(
-            theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", `— ${browser.getRootPath()} `)
+            theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ") + theme.fg("text", browser.getRootPath()) + " "
           );
 
           return [

@@ -1269,6 +1269,7 @@ export function createFileBrowser(
       return formatRootPath(rootPath);
     },
 
+
     render(width: number): string[] {
       lastRenderWidth = width;
       const now = Date.now();
