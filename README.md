@@ -67,7 +67,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `c`: toggle changed-only view
 - `C`: toggle the expanded changed view; enabling it expands every directory containing changes
 - `]` / `[`: next/prev changed file
-- `/`: search (type to filter; `Esc` or `Backspace` on an empty query exits)
+- `/`: search (type to filter; press `/` again to clear, or `Esc` / `Backspace` on an empty query to exit)
 - `u`: go up one directory (re-root to parent)
 - `.`: jump back to the starting directory
 - `+` / `-`: increase/decrease browser height
@@ -81,7 +81,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files
 - `w`: toggle word wrap (disabled by default)
-- `/`: search (type to search; `Esc` or `Backspace` on an empty query exits)
+- `/`: search (press `/` again to clear; `Esc` or `Backspace` on an empty query exits)
 - `n` / `N`: next/prev match
 - `v`: select mode (line selection)
 - `c`: comment on selected lines (inline prompt)

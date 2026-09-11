@@ -677,7 +677,10 @@ export function createViewer(
       }
 
       if (state.mode === "search") {
-        if (matchesKey(data, Key.enter)) {
+        if (matchesKey(data, "/")) {
+          resetSearch();
+          searchInput.reset();
+        } else if (matchesKey(data, Key.enter)) {
           setMode("normal", true);
         } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
           setMode("normal");
@@ -713,6 +716,7 @@ export function createViewer(
       }
       if (matchesKey(data, "/") && state.mode !== "select") {
         switchMarkdownToRaw();
+        resetSearch();
         setMode("search");
         return { type: "none" };
       }

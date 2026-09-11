@@ -150,6 +150,11 @@ describe("file browser expanded changed view", () => {
     const rendered = browser.render(100).join("\n");
     expect(rendered).toContain("/changed");
     expect(rendered).toContain(CURSOR_MARKER);
+
+    browser.handleInput("/");
+    const cleared = browser.render(100).join("\n");
+    expect(cleared).not.toContain("/changed");
+    expect(cleared).toContain(`/${CURSOR_MARKER}█`);
   });
 
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {

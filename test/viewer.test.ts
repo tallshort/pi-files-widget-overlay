@@ -75,8 +75,12 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(80)[0]).toContain("[1/2]");
 
     viewer.handleInput("/");
+    expect(viewer.render(80)[0]).toContain(`/${CURSOR_MARKER}█`);
     viewer.handleInput("1");
-    expect(viewer.render(80).join("\n")).toContain("/needle1");
+    expect(viewer.render(80).join("\n")).toContain("/1");
+
+    viewer.handleInput("/");
+    expect(viewer.render(80)[0]).toContain(`/${CURSOR_MARKER}█`);
 
     viewer.handleInput("\u001b");
     viewer.handleInput("/");

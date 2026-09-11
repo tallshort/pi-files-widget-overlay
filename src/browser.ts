@@ -1112,7 +1112,11 @@ export function createFileBrowser(
       return;
     }
     if (browser.searchMode) {
-      if (matchesKey(data, Key.enter)) {
+      if (matchesKey(data, "/")) {
+        browser.searchQuery = "";
+        browser.selectedIndex = 0;
+        textInput.reset();
+      } else if (matchesKey(data, Key.enter)) {
         browser.searchMode = false;
         browser.selectedIndex = 0;
         textInput.reset();
