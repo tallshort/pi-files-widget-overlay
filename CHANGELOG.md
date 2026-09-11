@@ -4,6 +4,8 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.4.0] - 2026-09-11
+
 ### Fixed
 - Prevent image files from being decoded as text in the overlay; show a safe placeholder instead.
 - Retain the current rendered-Markdown paragraph across terminal-width changes when a matching anchor is available.
