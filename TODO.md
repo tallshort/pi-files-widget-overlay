@@ -26,7 +26,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 - [x] Verify Git status, stats, and diffs use correct paths from repository subdirectories.
 - [x] Add coverage for wrapped lines, logical-line navigation, selection, comments, Diff search, and Diff comment ranges.
 - [x] Add coverage for rendered-to-raw Markdown selection boundaries and rendered Markdown word-wrap toggling.
-- [ ] Preserve the visible rendered-Markdown paragraph across resize when deterministic renderer anchors are available; otherwise document and test the fallback reset behavior.
+- [x] Preserve the visible rendered-Markdown paragraph across resize when deterministic renderer anchors are available; otherwise document and test the fallback reset behavior.
 - [x] Add diff-view and selection coverage for staged modifications, staged-added files, and files with both staged and unstaged changes; keep untracked files in normal view.
 - [x] Add platform-neutral tests for path normalization.
 - [ ] Add terminal key-sequence tests; add OS-specific CI only for platforms declared supported in the README.

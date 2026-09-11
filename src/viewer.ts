@@ -251,8 +251,52 @@ export function createViewer(
     ensureCursorVisible();
   }
 
+  function stripAnsi(text: string): string {
+    return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+  }
+
+  function normalizeRenderedMarkdownText(text: string): string {
+    return stripAnsi(text).trim().replace(/\s+/g, " ");
+  }
+
+  function renderedMarkdownParagraphAt(row: number): { text: string; rowOffset: number } | null {
+    const lines = state.renderedLines.lines.map(normalizeRenderedMarkdownText);
+    if (!lines[row]) return null;
+
+    let start = row;
+    while (start > 0 && lines[start - 1]) start--;
+    let end = row;
+    while (end + 1 < lines.length && lines[end + 1]) end++;
+    return { text: lines.slice(start, end + 1).join(" "), rowOffset: row - start };
+  }
+
+  function captureRenderedMarkdownAnchor(): { text: string; rowOffset: number; viewportOffset: number } | null {
+    const paragraph = renderedMarkdownParagraphAt(state.cursor);
+    return paragraph && paragraph.text
+      ? { ...paragraph, viewportOffset: state.cursor - state.scroll }
+      : null;
+  }
+
+  function findRenderedMarkdownAnchor(text: string, rowOffset: number): number | null {
+    const lines = state.renderedLines.lines.map(normalizeRenderedMarkdownText);
+    const matches: number[] = [];
+    for (let start = 0; start < lines.length;) {
+      if (!lines[start]) {
+        start++;
+        continue;
+      }
+      let end = start;
+      while (end + 1 < lines.length && lines[end + 1]) end++;
+      if (lines.slice(start, end + 1).join(" ") === text) matches.push(Math.min(start + rowOffset, end));
+      start = end + 1;
+    }
+    return matches.length === 1 ? matches[0] ?? null : null;
+  }
+
   function reloadContent(width: number): void {
     if (!state.file) return;
+    const restoreRenderedMarkdown = isRenderedMarkdownMode() && state.lastRenderWidth !== 0 && state.lastRenderWidth !== width;
+    const markdownAnchor = restoreRenderedMarkdown ? captureRenderedMarkdownAnchor() : null;
     const cursorGroup = rowGroup(state.cursor);
     const selectStartGroup = rowGroup(state.selectStart);
     const selectEndGroup = rowGroup(state.selectEnd);
@@ -265,7 +309,20 @@ export function createViewer(
       theme
     );
     state.renderedLines = result;
-    state.cursor = firstRowForGroup(cursorGroup);
+    const anchoredRow = markdownAnchor && result.renderedMarkdown
+      ? findRenderedMarkdownAnchor(markdownAnchor.text, markdownAnchor.rowOffset)
+      : null;
+    if (restoreRenderedMarkdown && result.renderedMarkdown) {
+      if (anchoredRow !== null) {
+        state.cursor = anchoredRow;
+        state.scroll = Math.max(0, anchoredRow - (markdownAnchor?.viewportOffset ?? 0));
+      } else {
+        state.cursor = 0;
+        state.scroll = 0;
+      }
+    } else {
+      state.cursor = firstRowForGroup(cursorGroup);
+    }
     if (preserveSelection) {
       state.selectStart = firstRowForGroup(selectStartGroup);
       state.selectEnd = firstRowForGroup(selectEndGroup);

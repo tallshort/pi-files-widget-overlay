@@ -256,6 +256,95 @@ describe("file viewer word wrapping", () => {
     expect(rendered).toMatch(/\+ \d+ │ export const value = 3;/);
     expect(rendered).not.toContain("export const value = 1;");
   });
+
+  it("keeps the current rendered Markdown paragraph anchored across a width change", async () => {
+    const filePath = await createSourceFile(
+      "# Title\n\nThis paragraph contains a distinctive anchor phrase that should remain visible after the terminal becomes wider.\n\nAnother paragraph.\n",
+      "README.md"
+    );
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    initTheme();
+    viewer.render(24);
+    viewer.handleInput("w");
+
+    let selected = "";
+    for (let index = 0; index < 10; index++) {
+      selected = viewer.render(24).find(line => line.includes("<selectedBg>")) ?? "";
+      if (selected.includes("distinctive")) break;
+      viewer.handleInput("j");
+    }
+    expect(selected).toContain("distinctive");
+
+    const resized = viewer.render(80).find(line => line.includes("<selectedBg>")) ?? "";
+    expect(resized).toContain("terminal becomes wider");
+  });
+
+  it("keeps the current rendered Markdown paragraph when the terminal narrows", async () => {
+    const filePath = await createSourceFile(
+      "# Title\n\nThis paragraph contains a distinctive anchor phrase that should remain visible after the terminal becomes narrower.\n\nAnother paragraph.\n",
+      "README.md"
+    );
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    initTheme();
+    viewer.render(80);
+    viewer.handleInput("w");
+
+    let selected = "";
+    for (let index = 0; index < 10; index++) {
+      selected = viewer.render(80).find(line => line.includes("<selectedBg>")) ?? "";
+      if (selected.includes("distinctive")) break;
+      viewer.handleInput("j");
+    }
+    expect(selected).toContain("distinctive");
+
+    const narrowed = viewer.render(24).find(line => line.includes("<selectedBg>")) ?? "";
+    expect(narrowed).toContain("This paragraph");
+  });
+  it("resets rendered Markdown to the top when an anchor is ambiguous", async () => {
+    const filePath = await createSourceFile(
+      "# Title\n\nRepeated paragraph text.\n\nRepeated paragraph text.\n",
+      "README.md"
+    );
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    initTheme();
+    viewer.render(24);
+    viewer.handleInput("w");
+
+    let repeatedRows = 0;
+    for (let index = 0; index < 12; index++) {
+      const selected = viewer.render(24).find(line => line.includes("<selectedBg>")) ?? "";
+      if (selected.includes("Repeated paragraph text.")) repeatedRows++;
+      if (repeatedRows === 2) break;
+      viewer.handleInput("j");
+    }
+    expect(repeatedRows).toBe(2);
+
+    const resized = viewer.render(80);
+    const selected = resized.find(line => line.includes("<selectedBg>")) ?? "";
+    expect(selected.replace(/\x1b\[[0-?]*[ -/]*[@-~]|<\/?selectedBg>/g, "")).toContain("Title");
+  });
+  it("resets rendered Markdown to the top when its anchor no longer exists", async () => {
+    const filePath = await createSourceFile(
+      "# Title\n\nThis paragraph contains a distinctive anchor phrase.\n",
+      "README.md"
+    );
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    initTheme();
+    viewer.render(24);
+    viewer.handleInput("w");
+    viewer.handleInput("j");
+    await writeFile(filePath, "# Replacement\n\nNew paragraph.\n");
+
+    const resized = viewer.render(80);
+    expect(resized.join("\n")).toContain("Replacement");
+    const selected = resized.find(line => line.includes("<selectedBg>")) ?? "";
+    expect(selected.replace(/<\/?selectedBg>/g, "").trim()).toBe("");
+  });
+
   it("resets rendered Markdown selection to a source-aligned raw line", async () => {
     const filePath = await createSourceFile("# Title\n\nThis paragraph is deliberately long enough to wrap when rendered in a narrow viewer.\n", "README.md");
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
