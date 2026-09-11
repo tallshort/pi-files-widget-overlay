@@ -48,7 +48,6 @@ interface ScanState {
   isScanning: boolean;
   isPartial: boolean;
   pending: number;
-  spinnerIndex: number;
 }
 
 interface BrowserState {
@@ -75,7 +74,6 @@ interface ChangedFile {
   ancestors: FileNode[];
 }
 
-const SPINNER_FRAMES = ["⠋", "⠙", "⠹", "⠸", "⠼", "⠴", "⠦", "⠧", "⠇", "⠏"];
 
 function findNodeByPath(root: FileNode | null, path: string): FileNode | null {
   if (!root) return null;
@@ -300,7 +298,6 @@ export function createFileBrowser(
     isScanning: false,
     isPartial: false,
     pending: 0,
-    spinnerIndex: 0,
   };
 
   const browser: BrowserState = {
@@ -979,14 +976,9 @@ export function createFileBrowser(
     if (stats.additions > 0) statsDisplay += theme.fg("success", ` +${stats.additions}`);
     if (stats.deletions > 0) statsDisplay += theme.fg("error", ` -${stats.deletions}`);
 
-    const hasActivity = browser.scanState.isScanning || lineCountPending.size > 0;
-    if (hasActivity) {
-      browser.scanState.spinnerIndex = (browser.scanState.spinnerIndex + 1) % SPINNER_FRAMES.length;
-    }
-    const spinner = SPINNER_FRAMES[browser.scanState.spinnerIndex];
     const activityParts: string[] = [];
-    if (browser.scanState.isScanning) activityParts.push(`${spinner} scanning`);
-    if (lineCountPending.size > 0) activityParts.push(`${spinner} counts`);
+    if (browser.scanState.isScanning) activityParts.push("… scanning");
+    if (lineCountPending.size > 0) activityParts.push("… counts");
     const activityIndicator = activityParts.length > 0 ? theme.fg("dim", ` ${activityParts.join(" ")}`) : "";
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
     const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";

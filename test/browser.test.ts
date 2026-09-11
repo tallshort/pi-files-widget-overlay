@@ -107,6 +107,14 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("C");
     expect(browser.render(12).join("\n")).toContain(" M");
   });
+  it("uses stable labels for background activity", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    const rendered = browser.render(100).join("\n");
+    expect(rendered).toContain("… counts");
+    expect(rendered).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
+  });
 
   it("marks files modified by the current agent session with a robot", async () => {
     const root = await createChangedRepository();

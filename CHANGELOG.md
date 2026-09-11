@@ -6,6 +6,7 @@ All notable changes to this extension will be documented in this file.
 
 ### Fixed
 - Position the browser search cursor for IME composition and let Backspace cancel an empty query.
+- Use stable background-activity labels instead of animated spinner frames to avoid terminal refresh artifacts.
 
 ### Added
 - Add `C` in viewer selection mode for whole-file comments without line context.
