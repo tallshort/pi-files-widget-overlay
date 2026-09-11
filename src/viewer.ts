@@ -52,6 +52,7 @@ interface ViewerState {
   lastRenderWidth: number;
   lastLoadedMtimeMs: number | null;
   height: number;
+  pendingCount: string;
 }
 
 export interface ViewerController {
@@ -98,6 +99,7 @@ export function createViewer(
     lastRenderWidth: 0,
     lastLoadedMtimeMs: null,
     height: getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8),
+    pendingCount: "",
   };
 
   function isMarkdownFile(): boolean {
@@ -217,6 +219,17 @@ export function createViewer(
   function firstRowForGroup(group: number): number {
     const row = state.renderedLines.rowGroups.indexOf(group);
     return row === -1 ? Math.min(Math.max(0, group), Math.max(0, state.renderedLines.lines.length - 1)) : row;
+  }
+
+  function jumpToLine(lineNumber: number): void {
+    state.cursor = firstRowForGroup(Math.max(0, Math.min(lineNumber - 1, state.renderedLines.logicalLines.length - 1)));
+    ensureCursorVisible();
+  }
+
+  function takePendingLineNumber(): number | null {
+    const value = state.pendingCount ? Number(state.pendingCount) : null;
+    state.pendingCount = "";
+    return value && Number.isSafeInteger(value) ? value : null;
   }
 
   function groupEnd(index: number): number {
@@ -605,12 +618,26 @@ export function createViewer(
 
     handleInput(data: string): ViewerAction {
       if (!state.file) return { type: "none" };
+      const lineJump = matchesKey(data, "shift+g");
+      if (/^\d$/.test(data) && state.mode !== "select") {
+        state.pendingCount += data;
+        return { type: "none" };
+      }
+      const requestedLine = lineJump ? takePendingLineNumber() : null;
+      if (!lineJump) state.pendingCount = "";
       if (readOnly) {
         const halfPage = Math.max(1, Math.floor(state.height / 2));
         if (matchesKey(data, "g")) state.cursor = 0;
-        else if (matchesKey(data, "shift+g")) state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
+        else if (lineJump) {
+          if (requestedLine !== null) jumpToLine(requestedLine);
+          else state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
+        }
         else if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) moveCursorByGroups(1, halfPage);
         else if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) moveCursorByGroups(-1, halfPage);
+        else if (matchesKey(data, "w")) {
+          state.wordWrap = !state.wordWrap;
+          state.lastRenderWidth = 0;
+        }
         else return { type: "none" };
         ensureCursorVisible();
         return { type: "none" };
@@ -743,10 +770,14 @@ export function createViewer(
         ensureCursorVisible();
         return { type: "none" };
       }
-      if (matchesKey(data, "shift+g")) {
-        state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
-        if (state.mode === "select") state.selectEnd = state.cursor;
-        ensureCursorVisible();
+      if (lineJump) {
+        if (requestedLine !== null && state.mode !== "select") {
+          jumpToLine(requestedLine);
+        } else {
+          state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
+          if (state.mode === "select") state.selectEnd = state.cursor;
+          ensureCursorVisible();
+        }
         return { type: "none" };
       }
       if (matchesKey(data, "+") || matchesKey(data, "=")) {

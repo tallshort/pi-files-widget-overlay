@@ -113,11 +113,15 @@ describe("file viewer word wrapping", () => {
   });
 
   it("does not highlight a current line in a read-only preview", async () => {
-    const filePath = await createSourceFile("const value = 1;\n");
+    const filePath = await createSourceFile("const value = 'this preview line is intentionally long enough to wrap';\n");
     const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
     preview.setFile({ name: "preview.ts", path: filePath, isDirectory: false });
 
-    expect(preview.render(40).some(line => line.includes("<selectedBg>"))).toBe(false);
+    const beforeWrap = preview.render(20);
+    expect(beforeWrap.some(line => line.includes("<selectedBg>"))).toBe(false);
+    expect(preview.handleInput("w")).toEqual({ type: "none" });
+    const afterWrap = preview.render(20);
+    expect(afterWrap.filter(line => line.includes("│")).length).toBeGreaterThan(beforeWrap.filter(line => line.includes("│")).length);
     expect(preview.handleInput("j")).toEqual({ type: "none" });
   });
 
@@ -216,6 +220,11 @@ describe("file viewer word wrapping", () => {
 
     viewer.handleInput("\u0015");
     expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("1 │ const wrapped");
+
+    viewer.handleInput("1");
+    viewer.handleInput("2");
+    viewer.handleInput("G");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("12 │ const line11");
   });
 
   it("keeps a wrapped diff comment stable across widths", async () => {

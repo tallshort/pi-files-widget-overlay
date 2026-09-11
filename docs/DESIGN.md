@@ -20,11 +20,11 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes while the overlay is open. Large non-Git trees scan progressively and display their partial state.
 - A `*` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
-- On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, and `Ctrl-U/Ctrl-D` scroll it without allowing edits, searches, selection, comments, or mode changes. Narrow terminals retain the single-column tree.
+- On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Narrow terminals retain the single-column tree.
 
 ### Viewer and comments
 
-- The viewer keeps a real line cursor. Navigation moves the cursor and scrolls only as needed to keep it visible; the active line is highlighted.
+- The viewer keeps a real line cursor. Navigation moves the cursor and scrolls only as needed to keep it visible; the active line is highlighted. `g`/`G` jump to the top/bottom, and a numeric prefix with `G` jumps to that source line.
 - Word wrap is disabled by default; `w` toggles it for code, diffs, and rendered Markdown.
 - `v` starts or ends selection. The selection uses the existing gutter: `▸` marks the endpoint and `┃` marks the intervening lines.
 - For Markdown, `m` toggles rendered and raw source. Searching or selecting rendered Markdown first switches to raw mode, keeping match positions and comments source-aligned. On a terminal-width change, the viewer restores the current paragraph by matching rendered text; if no match is available, it resets to the top.

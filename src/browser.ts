@@ -1079,7 +1079,7 @@ export function createFileBrowser(
   }
 
   function handleBrowserInput(data: string): void {
-    const previewNavigation = matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u");
+    const previewNavigation = /^\d$/.test(data) || matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u") || matchesKey(data, "w");
     if (!browser.searchMode && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
       previewViewer.handleInput(data);
       return;
