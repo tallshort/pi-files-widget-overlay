@@ -589,7 +589,7 @@ export function createViewer(
 
       const lines: string[] = [];
       lines.push(renderHeader(width));
-      lines.push(theme.fg("border", "─".repeat(width)));
+      lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
       const visible = state.renderedLines.lines.slice(state.scroll, state.scroll + state.height);
       for (let i = 0; i < state.height; i++) {
@@ -612,7 +612,7 @@ export function createViewer(
         }
       }
 
-      lines.push(theme.fg("border", "─".repeat(width)));
+      lines.push(theme.fg("borderMuted", "─".repeat(width)));
       lines.push(...renderFooter(width));
 
       return lines;
