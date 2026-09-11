@@ -1,5 +1,5 @@
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -20,7 +20,7 @@ import {
   SCAN_BATCH_SIZE,
   SAFE_MODE_ENTRY_THRESHOLD,
 } from "./constants";
-import { getGitBranch, getGitDiffStats, getGitFileList, getGitStatus, isGitRepo } from "./git";
+import { getGitBranch, getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitStatus, getGitStatusAsync, isGitRepo } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
 import type { DiffStats, FileNode, FlatNode } from "./types";
 import { isIgnoredStatus, isUntrackedStatus } from "./utils";
@@ -334,6 +334,7 @@ export function createFileBrowser(
   // capture the value when they start and bail after each await if it changed,
   // so work belonging to an old root can never mutate state for the new one.
   let rootGeneration = 0;
+  let gitRefreshGeneration: number | null = null;
 
   const normalizeGitPath = (path: string): string => path.split(sep).join("/");
 
@@ -737,53 +738,56 @@ export function createFileBrowser(
   }
 
   function refreshMetadata(): void {
-    if (!browser.root) return;
+    if (!browser.root || !repo || gitRefreshGeneration === rootGeneration) return;
+
+    const generation = rootGeneration;
+    const refreshRoot = rootPath;
     const previousDisplayList = getDisplayList();
     const currentPath = previousDisplayList[browser.selectedIndex]?.node.path;
     const viewingFile = viewer.getFile();
     const viewingFilePath = viewingFile?.path;
+    gitRefreshGeneration = generation;
 
-    if (repo) {
-      let gitMetadataFailed = false;
-      const reportRefreshGitError = (operation: string) => {
-        gitMetadataFailed = true;
-        reportGitError(operation);
-      };
-      gitStatus = getGitStatus(rootPath, {}, reportRefreshGitError);
-      diffStats = getGitDiffStats(rootPath, reportRefreshGitError);
-      if (!gitMetadataFailed && browser.errorMessage?.endsWith(" unavailable")) {
-        browser.errorMessage = null;
-      }
-      applyGitUpdates();
-      addUntrackedNodes();
-    }
+    void Promise.all([getGitStatusAsync(refreshRoot, {}), getGitDiffStatsAsync(refreshRoot), getGitBranchAsync(refreshRoot)])
+      .then(([statusResult, diffStatsResult, branch]) => {
+        if (generation !== rootGeneration) return;
 
-    applyAgentModified();
-    updateTreeStats(browser.root);
-    browser.stats = getTreeStats(browser.root);
-    refreshLists();
-
-    const updatedDisplayList = getDisplayList();
-    if (currentPath) {
-      const newIdx = updatedDisplayList.findIndex(f => f.node.path === currentPath);
-      if (newIdx !== -1) {
-        browser.selectedIndex = newIdx;
-      }
-    }
-
-    browser.selectedIndex = Math.min(browser.selectedIndex, Math.max(0, updatedDisplayList.length - 1));
-
-    if (viewingFilePath && browser.root) {
-      const newNode = browser.nodeByPath.get(viewingFilePath) ?? findNodeByPath(browser.root, viewingFilePath);
-      if (newNode) {
-        if (newNode.lineCount === undefined && viewingFile?.lineCount !== undefined) {
-          newNode.lineCount = viewingFile.lineCount;
+        if (statusResult.failed) reportGitError("Git status");
+        if (diffStatsResult.failed) reportGitError("Git diff statistics");
+        if (!statusResult.failed && !diffStatsResult.failed && browser.errorMessage?.endsWith(" unavailable")) {
+          browser.errorMessage = null;
         }
-        viewer.updateFileRef(newNode);
-      }
-    }
-  }
 
+        gitStatus = statusResult.status;
+        diffStats = diffStatsResult.stats;
+        gitBranch = branch;
+        applyGitUpdates();
+        addUntrackedNodes();
+        applyAgentModified();
+        updateTreeStats(browser.root!);
+        browser.stats = getTreeStats(browser.root);
+        refreshLists();
+
+        const updatedDisplayList = getDisplayList();
+        if (currentPath) {
+          const newIdx = updatedDisplayList.findIndex(f => f.node.path === currentPath);
+          if (newIdx !== -1) browser.selectedIndex = newIdx;
+        }
+        browser.selectedIndex = Math.min(browser.selectedIndex, Math.max(0, updatedDisplayList.length - 1));
+
+        if (viewingFilePath && browser.root) {
+          const newNode = browser.nodeByPath.get(viewingFilePath) ?? findNodeByPath(browser.root, viewingFilePath);
+          if (newNode) {
+            if (newNode.lineCount === undefined && viewingFile?.lineCount !== undefined) newNode.lineCount = viewingFile.lineCount;
+            viewer.updateFileRef(newNode);
+          }
+        }
+        requestRender();
+      })
+      .finally(() => {
+        if (gitRefreshGeneration === generation) gitRefreshGeneration = null;
+      });
+  }
   function loadRoot(newRoot: string): void {
     rootGeneration += 1;
     rootPath = resolve(newRoot);
@@ -988,7 +992,7 @@ export function createFileBrowser(
     const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";
 
     const searchIndicator = browser.searchMode
-      ? theme.fg("accent", `  /${browser.searchQuery}█`)
+      ? theme.fg("accent", `  /${browser.searchQuery}${CURSOR_MARKER}█`)
       : "";
 
     const header = browser.searchMode
@@ -1118,8 +1122,13 @@ export function createFileBrowser(
         browser.selectedIndex = 0;
         textInput.reset();
       } else if (matchesKey(data, Key.backspace)) {
-        browser.searchQuery = browser.searchQuery.slice(0, -1);
-        browser.selectedIndex = 0;
+        if (browser.searchQuery) {
+          browser.searchQuery = browser.searchQuery.slice(0, -1);
+          browser.selectedIndex = 0;
+        } else {
+          browser.searchMode = false;
+          textInput.reset();
+        }
       } else if (matchesKey(data, Key.down)) {
         browser.selectedIndex = Math.min(maxIndex, browser.selectedIndex + 1);
       } else if (matchesKey(data, Key.up)) {

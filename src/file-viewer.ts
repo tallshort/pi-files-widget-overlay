@@ -1,6 +1,6 @@
 import { getLanguageFromPath, getMarkdownTheme, highlightCode, type Theme } from "@earendil-works/pi-coding-agent";
 import { Markdown, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
-import { execSync } from "node:child_process";
+import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 
 import { isGitRepo } from "./git";
@@ -134,17 +134,17 @@ export function loadFileContent(
         let diffOutput = "";
 
         // First try: unstaged changes
-        const unstaged = execSync(`git diff --no-color -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+          const unstaged = execFileSync("git", ["diff", "--no-color", "--", filePath], { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
         if (unstaged.trim()) {
           diffOutput = unstaged;
         } else {
           // Second try: staged changes
-          const staged = execSync(`git diff --no-color --cached -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+          const staged = execFileSync("git", ["diff", "--no-color", "--cached", "--", filePath], { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
           if (staged.trim()) {
             diffOutput = staged;
           } else {
             // Third try: diff against HEAD (for new files that are staged)
-            const headDiff = execSync(`git diff --no-color HEAD -- "${filePath}"`, { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
+            const headDiff = execFileSync("git", ["diff", "--no-color", "HEAD", "--", filePath], { cwd, encoding: "utf-8", timeout: 10000, stdio: "pipe" });
             if (headDiff.trim()) {
               diffOutput = headDiff;
             }

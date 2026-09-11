@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, rm, stat, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { dirname, join } from "node:path";
 import { promisify } from "node:util";
@@ -32,10 +32,10 @@ async function createSourceFile(
   return filePath;
 }
 
-async function createChangedFile(): Promise<{ root: string; filePath: string }> {
+async function createChangedFile(fileName = "changed.ts"): Promise<{ root: string; filePath: string }> {
   const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
   directories.push(root);
-  const filePath = join(root, "changed.ts");
+  const filePath = join(root, fileName);
   await writeFile(filePath, "export const value = 1;\n");
   await execFile("git", ["init"], { cwd: root });
   await execFile("git", ["config", "user.email", "test@example.com"], { cwd: root });
@@ -270,6 +270,14 @@ describe("file viewer word wrapping", () => {
     viewer.render(24);
     viewer.handleInput("G");
     expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("2 │ const final = 2;");
+  });
+
+  it("loads a diff for a shell-like filename without executing it", async () => {
+    const { root, filePath } = await createChangedFile("special $(touch injected).ts");
+    const loaded = loadFileContent(filePath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+
+    expect(loaded.logicalLines.join("\n")).toContain("export const value = 2;");
+    await expect(stat(join(root, "injected"))).rejects.toThrow();
   });
 
   it("keeps a wrapped diff comment stable across widths", async () => {

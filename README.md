@@ -67,7 +67,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `c`: toggle changed-only view
 - `C`: toggle the expanded changed view; enabling it expands every directory containing changes
 - `]` / `[`: next/prev changed file
-- `/`: search (type to filter, `Esc` to exit)
+- `/`: search (type to filter; `Esc` or `Backspace` on an empty query exits)
 - `u`: go up one directory (re-root to parent)
 - `.`: jump back to the starting directory
 - `+` / `-`: increase/decrease browser height

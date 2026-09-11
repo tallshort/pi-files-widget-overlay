@@ -4,11 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
+import { CURSOR_MARKER } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
-import { getGitDiffStats, getGitFileList, getGitStatus } from "../src/git.ts";
+import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitStatus, getGitStatusAsync } from "../src/git.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -121,6 +122,16 @@ describe("file browser expanded changed view", () => {
     expect(browser.getRootPath()).toBe(root);
   });
 
+  it("cancels an empty browser search with backspace", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.handleInput("/");
+    browser.handleInput("\u007f");
+
+    expect(browser.render(100).join("\n")).not.toContain(CURSOR_MARKER);
+  });
+
   it("shows the active browser search query", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
@@ -128,7 +139,9 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("/");
     browser.handleInput("changed");
 
-    expect(browser.render(100).join("\n")).toContain("/changed");
+    const rendered = browser.render(100).join("\n");
+    expect(rendered).toContain("/changed");
+    expect(rendered).toContain(CURSOR_MARKER);
   });
 
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
@@ -152,6 +165,34 @@ describe("file browser expanded changed view", () => {
     const status = getGitStatus(root);
     expect(status.get(".pi")).toBe("??");
     expect(status.has(".pi/")).toBe(false);
+  });
+
+  it("preserves special paths and rename destinations in Git metadata", async () => {
+    const root = await createChangedRepository();
+    const oldPath = join(root, "src", "old $(unsafe).ts");
+    await writeFile(oldPath, "export const renamed = true;\n");
+    await execFile("git", ["add", "--", "src/old $(unsafe).ts"], { cwd: root });
+    await execFile("git", ["commit", "-m", "add special path"], { cwd: root });
+    await execFile("git", ["mv", "--", "src/old $(unsafe).ts", "src/new name [renamed].ts"], { cwd: root });
+
+    expect(getGitStatus(root).get("src/new name [renamed].ts")).toBe("R");
+    expect(getGitFileList(root)).toContain("src/new name [renamed].ts");
+    expect(getGitDiffStats(root).get("src/new name [renamed].ts")).toEqual({ additions: 0, deletions: 0 });
+
+    const [statusResult, diffStatsResult] = await Promise.all([getGitStatusAsync(root), getGitDiffStatsAsync(root)]);
+    expect(statusResult.status.get("src/new name [renamed].ts")).toBe("R");
+    expect(diffStatsResult.stats.get("src/new name [renamed].ts")).toEqual({ additions: 0, deletions: 0 });
+  });
+
+  it("loads Git metadata asynchronously", async () => {
+    const root = await createChangedRepository();
+    const [statusResult, diffStatsResult, branch] = await Promise.all([getGitStatusAsync(root), getGitDiffStatsAsync(root), getGitBranchAsync(root)]);
+
+    expect(statusResult).toMatchObject({ failed: false });
+    expect(statusResult.status.get("src/nested/changed.ts")).toBe("M");
+    expect(diffStatsResult).toMatchObject({ failed: false });
+    expect(diffStatsResult.stats.get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
+    expect(branch).not.toBe("");
   });
 
   it("keeps Git metadata paths relative to a repository subdirectory", async () => {

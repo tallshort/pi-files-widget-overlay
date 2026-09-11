@@ -1,14 +1,24 @@
-import { execSync } from "node:child_process";
+import { execFile, execFileSync } from "node:child_process";
+import { promisify } from "node:util";
 
 import type { DiffStats } from "./types";
 
 const GIT_MAX_BUFFER = 32 * 1024 * 1024;
-
 type GitErrorReporter = (operation: string) => void;
+const execFileAsync = promisify(execFile);
+
+function runGitSync(cwd: string, args: string[], timeout: number): string {
+  return execFileSync("git", args, { cwd, encoding: "utf-8", timeout, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER }).toString();
+}
+
+async function runGit(cwd: string, args: string[], timeout: number): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf-8", timeout, maxBuffer: GIT_MAX_BUFFER });
+  return stdout.toString();
+}
 
 export function isGitRepo(cwd: string): boolean {
   try {
-    execSync("git rev-parse --is-inside-work-tree", { cwd, encoding: "utf-8", timeout: 2000, stdio: "pipe" });
+    runGitSync(cwd, ["rev-parse", "--is-inside-work-tree"], 2000);
     return true;
   } catch {
     return false;
@@ -17,13 +27,20 @@ export function isGitRepo(cwd: string): boolean {
 
 /**
  * Path of `cwd` relative to the repository top-level (e.g. "app/"), or "" when
- * `cwd` is the top-level itself. `git status --porcelain` reports paths relative
- * to the repository root, while `git ls-files` (and this widget's node keys) are
- * relative to `cwd` — this prefix lets us translate between the two.
+ * at the top level. Git status reports paths relative to the repository root,
+ * while this widget's node keys are relative to `cwd`.
  */
 function getGitPathPrefix(cwd: string): string {
   try {
-    return execSync("git rev-parse --show-prefix", { cwd, encoding: "utf-8", timeout: 2000, stdio: "pipe" }).trim();
+    return runGitSync(cwd, ["rev-parse", "--show-prefix"], 2000).trim();
+  } catch {
+    return "";
+  }
+}
+
+async function getGitPathPrefixAsync(cwd: string): Promise<string> {
+  try {
+    return (await runGit(cwd, ["rev-parse", "--show-prefix"], 2000)).trim();
   } catch {
     return "";
   }
@@ -36,31 +53,66 @@ function stripPathPrefix(filePath: string, prefix: string): string | null {
   return null;
 }
 
-export function getGitStatus(cwd: string, options: { includeIgnored?: boolean } = {}, onError?: GitErrorReporter): Map<string, string> {
+function isRenameOrCopy(statusCode: string): boolean {
+  return statusCode.includes("R") || statusCode.includes("C");
+}
+
+/** Parse porcelain v1 -z output. Rename/copy records contain destination then source. */
+function parseGitStatus(output: string, prefix: string): Map<string, string> {
   const status = new Map<string, string>();
-  try {
-    const flags = ["--porcelain"];
-    if (options.includeIgnored !== false) flags.push("--ignored");
-    const prefix = getGitPathPrefix(cwd);
-    const output = execSync(`git status ${flags.join(" ")}`, { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
-    for (const line of output.split("\n")) {
-      if (line.length < 3) continue;
-      const statusCode = line.slice(0, 2).trim() || "?";
-      const filePath = stripPathPrefix(line.slice(3), prefix)?.replace(/\/+$/, "");
-      if (filePath === null || !filePath) continue;
-      status.set(filePath, statusCode);
-    }
-  } catch {
-    onError?.("Git status");
+  const entries = output.split("\0");
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    if (entry.length < 3) continue;
+    const statusCode = entry.slice(0, 2).trim() || "?";
+    const filePath = entry.slice(3);
+    if (isRenameOrCopy(statusCode)) index += 1; // Consume the source path; retain the destination.
+    const relativePath = stripPathPrefix(filePath, prefix)?.replace(/\/+$/, "");
+    if (relativePath) status.set(relativePath, statusCode);
   }
   return status;
+}
+
+function mergeDiffStat(target: Map<string, DiffStats>, path: string, additions: number, deletions: number): void {
+  const existing = target.get(path);
+  target.set(path, existing ? { additions: existing.additions + additions, deletions: existing.deletions + deletions } : { additions, deletions });
+}
+
+/** Parse --numstat -z output, including rename/copy records with old and new NUL fields. */
+function parseGitDiffStats(output: string, target: Map<string, DiffStats>): void {
+  const entries = output.split("\0");
+  for (let index = 0; index < entries.length; index++) {
+    const entry = entries[index];
+    const firstTab = entry.indexOf("\t");
+    const secondTab = firstTab === -1 ? -1 : entry.indexOf("\t", firstTab + 1);
+    if (firstTab === -1 || secondTab === -1) continue;
+
+    const additions = parseInt(entry.slice(0, firstTab), 10) || 0;
+    const deletions = parseInt(entry.slice(firstTab + 1, secondTab), 10) || 0;
+    let filePath = entry.slice(secondTab + 1);
+    if (filePath === "") {
+      index += 1; // Old path.
+      filePath = entries[++index] ?? ""; // New path.
+    }
+    if (filePath) mergeDiffStat(target, filePath, additions, deletions);
+  }
+}
+
+export function getGitStatus(cwd: string, options: { includeIgnored?: boolean } = {}, onError?: GitErrorReporter): Map<string, string> {
+  try {
+    const args = ["status", "--porcelain=v1", "-z"];
+    if (options.includeIgnored !== false) args.push("--ignored");
+    return parseGitStatus(runGitSync(cwd, args, 5000), getGitPathPrefix(cwd));
+  } catch {
+    onError?.("Git status");
+    return new Map();
+  }
 }
 
 export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[] {
   const files = new Set<string>();
   try {
-    const tracked = execSync("git ls-files -z", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
-    for (const entry of tracked.split("\0")) {
+    for (const entry of runGitSync(cwd, ["ls-files", "-z"], 5000).split("\0")) {
       if (entry) files.add(entry);
     }
   } catch {
@@ -69,21 +121,8 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
 
   try {
     const prefix = getGitPathPrefix(cwd);
-    const statusOutput = execSync("git status --porcelain -uall -z", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
-    const entries = statusOutput.split("\0");
-    for (let i = 0; i < entries.length; i++) {
-      const entry = entries[i];
-      if (!entry) continue;
-      const statusCode = entry.slice(0, 2).trim();
-      let filePath = entry.slice(3);
-      if ((statusCode.startsWith("R") || statusCode.startsWith("C")) && entries[i + 1]) {
-        i += 1;
-        filePath = entries[i];
-      } else if (filePath.includes(" -> ")) {
-        filePath = filePath.split(" -> ").pop() || filePath;
-      }
-      const relPath = filePath ? stripPathPrefix(filePath, prefix)?.replace(/\/+$/, "") : null;
-      if (relPath) files.add(relPath);
+    for (const filePath of parseGitStatus(runGitSync(cwd, ["status", "--porcelain=v1", "-uall", "-z"], 5000), prefix).keys()) {
+      files.add(filePath);
     }
   } catch {
     onError?.("Git status");
@@ -94,7 +133,7 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
 
 export function getGitBranch(cwd: string): string {
   try {
-    return execSync("git branch --show-current", { cwd, encoding: "utf-8", timeout: 2000, stdio: "pipe" }).trim();
+    return runGitSync(cwd, ["branch", "--show-current"], 2000).trim();
   } catch {
     return "";
   }
@@ -103,27 +142,44 @@ export function getGitBranch(cwd: string): string {
 export function getGitDiffStats(cwd: string, onError?: GitErrorReporter): Map<string, DiffStats> {
   const stats = new Map<string, DiffStats>();
   try {
-    // Get diff stats for modified files. --relative keeps paths relative to cwd
-    // (and scoped to it) so they match the widget's cwd-relative node keys even
-    // when cwd is a subdirectory of the repository.
-    const output = execSync("git diff --relative --numstat HEAD", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
-    for (const line of output.split("\n")) {
-      const parts = line.split("\t");
-      if (parts.length < 3) continue;
-      stats.set(parts[2], { additions: parseInt(parts[0], 10) || 0, deletions: parseInt(parts[1], 10) || 0 });
-    }
-
-    const stagedOutput = execSync("git diff --relative --numstat --cached", { cwd, encoding: "utf-8", timeout: 5000, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER });
-    for (const line of stagedOutput.split("\n")) {
-      const parts = line.split("\t");
-      if (parts.length < 3) continue;
-      const additions = parseInt(parts[0], 10) || 0;
-      const deletions = parseInt(parts[1], 10) || 0;
-      const existing = stats.get(parts[2]);
-      stats.set(parts[2], existing ? { additions: existing.additions + additions, deletions: existing.deletions + deletions } : { additions, deletions });
-    }
+    parseGitDiffStats(runGitSync(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000), stats);
+    parseGitDiffStats(runGitSync(cwd, ["diff", "--relative", "--numstat", "-z", "--cached"], 5000), stats);
   } catch {
     onError?.("Git diff statistics");
   }
   return stats;
+}
+
+export async function getGitStatusAsync(cwd: string, options: { includeIgnored?: boolean } = {}): Promise<{ status: Map<string, string>; failed: boolean }> {
+  try {
+    const args = ["status", "--porcelain=v1", "-z"];
+    if (options.includeIgnored !== false) args.push("--ignored");
+    const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd), runGit(cwd, args, 5000)]);
+    return { status: parseGitStatus(output, prefix), failed: false };
+  } catch {
+    return { status: new Map(), failed: true };
+  }
+}
+
+export async function getGitBranchAsync(cwd: string): Promise<string> {
+  try {
+    return (await runGit(cwd, ["branch", "--show-current"], 2000)).trim();
+  } catch {
+    return "";
+  }
+}
+
+export async function getGitDiffStatsAsync(cwd: string): Promise<{ stats: Map<string, DiffStats>; failed: boolean }> {
+  const stats = new Map<string, DiffStats>();
+  try {
+    const [output, stagedOutput] = await Promise.all([
+      runGit(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000),
+      runGit(cwd, ["diff", "--relative", "--numstat", "-z", "--cached"], 5000),
+    ]);
+    parseGitDiffStats(output, stats);
+    parseGitDiffStats(stagedOutput, stats);
+    return { stats, failed: false };
+  } catch {
+    return { stats, failed: true };
+  }
 }

@@ -4,8 +4,15 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+### Fixed
+- Position the browser search cursor for IME composition and let Backspace cancel an empty query.
+
 ### Added
 - Add `C` in viewer selection mode for whole-file comments without line context.
+
+### Changed
+- Refresh Git metadata asynchronously so periodic updates do not block overlay rendering.
+- Use argument-based Git commands and NUL-delimited metadata to preserve special-character and rename/copy paths.
 ## [0.4.0] - 2026-09-11
 
 ### Fixed

@@ -16,9 +16,9 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - `j`/`k` and arrow keys move through the tree; `Enter`, `h`/`l`, and arrow keys open or collapse entries.
 - Directory icons use `▸` and `▾`; symlink directories include a `↗` marker and can be traversed safely.
-- `/` filters the displayed list, `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
+- `/` filters the displayed list; `Esc` or `Backspace` on an empty query cancels search. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
-- Git metadata refreshes while the overlay is open. Large non-Git trees scan progressively and display their partial state.
+- Git metadata refreshes asynchronously while the overlay is open, so existing tree state remains interactive until fresh metadata arrives; results from an earlier root are discarded after re-rooting.
 - A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
 - On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Narrow terminals retain the single-column tree.
 
@@ -53,7 +53,7 @@ The extension has no external runtime dependency beyond Pi and Node's built-in m
 
 - Code uses Pi's `highlightCode()` and the active Pi theme.
 - Markdown uses Pi TUI's `Markdown` renderer and Pi's Markdown theme.
-- Diffs are generated with `git diff --no-color`, parsed into unified-diff lines, and colored with Pi theme tokens.
+- Diffs are generated with argument-based Git commands and parsed from NUL-delimited metadata, preserving special-character and rename/copy paths; unified-diff lines are then colored with Pi theme tokens.
 - Git is optional: browsing and normal file viewing still work outside a repository.
 
 This replaces the upstream use of `bat`, `glow`, and `delta`, avoiding tool-specific palettes and making code, Markdown, and diffs follow the active Pi theme.
