@@ -56,6 +56,8 @@ npm run typecheck
 The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header separates the browser from the agent transcript; `q` or `Esc` closes it and returns focus to Pi.
 Diff viewing is built into the file viewer: open a changed tracked file and press `d` to toggle the git diff view.
 
+On wide terminals, the browser shows a read-only 3:7 tree/preview split. The preview follows the selected item; narrow terminals retain the single-column browser. In split view, `g/G`, `PgUp/PgDn`, and `Ctrl-U/Ctrl-D` scroll the preview without enabling editing.
+
 ## Browser Keybindings
 
 - `j/k` or `↑/↓`: move
@@ -74,7 +76,7 @@ Diff viewing is built into the file viewer: open a changed tracked file and pres
 ## Viewer Keybindings
 
 - `j/k` or `↑/↓`: move the line cursor (the viewport follows it)
-- `PgUp/PgDn`: page up/down
+- `PgUp/PgDn` or `Ctrl-U/Ctrl-D`: move up/down half a page
 - `g/G`: top/bottom
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files

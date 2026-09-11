@@ -106,6 +106,18 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("C");
     expect(browser.render(12).join("\n")).toContain(" M");
   });
+
+  it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    const wide = browser.render(100);
+    expect(wide.join("\n")).toContain("Directory selected - expand it in the file tree instead of opening it.");
+    expect(wide.some(line => line.includes("│"))).toBe(true);
+    expect(wide.at(-1)).toContain("j/k: nav");
+    expect(wide.at(-1)).not.toContain("│");
+    expect(browser.render(79).some(line => line.includes("│"))).toBe(false);
+  });
   it("shows hidden project files while keeping .git internal", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

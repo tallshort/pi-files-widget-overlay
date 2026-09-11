@@ -27,6 +27,7 @@ import { isIgnoredStatus, isUntrackedStatus } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
 import { createTextInputBuffer } from "./input-utils";
 
+const MIN_PREVIEW_WIDTH = 80;
 export interface BrowserController {
   render(width: number): string[];
   handleInput(data: string): void;
@@ -288,6 +289,9 @@ export function createFileBrowser(
   let gitBranch = "";
 
   const viewer = createViewer({ getRoot: () => rootPath, projectCwd }, theme, requestComment);
+  const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true }, theme, requestComment);
+  let previewPath: string | null = null;
+  let lastRenderWidth = 0;
   const textInput = createTextInputBuffer();
 
   const scanState: ScanState = {
@@ -1075,6 +1079,11 @@ export function createFileBrowser(
   }
 
   function handleBrowserInput(data: string): void {
+    const previewNavigation = matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u");
+    if (!browser.searchMode && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
+      previewViewer.handleInput(data);
+      return;
+    }
     const displayList = getDisplayList();
     const maxIndex = Math.max(0, displayList.length - 1);
 
@@ -1222,8 +1231,41 @@ export function createFileBrowser(
     }
   }
 
+  function renderBrowserWithPreview(width: number): string[] {
+    if (width < MIN_PREVIEW_WIDTH) return renderBrowser(width);
+
+    const treeWidth = Math.floor((width - 1) * 0.3);
+    const previewWidth = width - treeWidth - 1;
+    const selected = getDisplayList()[browser.selectedIndex]?.node;
+    if (selected) {
+      if (previewPath !== selected.path) {
+        previewViewer.setFile(selected);
+        previewPath = selected.path;
+      } else {
+        previewViewer.updateFileRef(selected);
+      }
+    } else {
+      previewViewer.close();
+      previewPath = null;
+    }
+
+    const treeLines = renderBrowser(treeWidth);
+    const treeContent = treeLines.slice(0, -2);
+    const fullWidthFooter = renderBrowser(width).slice(-2);
+    const previewLines = selected ? previewViewer.render(previewWidth).slice(0, -2) : [theme.fg("dim", "Preview unavailable")];
+    const lineCount = treeContent.length;
+    const separator = theme.fg("borderMuted", "│");
+    const splitLines = Array.from({ length: lineCount }, (_, index) => {
+      const tree = truncateToWidth(treeContent[index] ?? "", treeWidth, "", true);
+      const preview = truncateToWidth(previewLines[index] ?? "", previewWidth, "", true);
+      return `${tree}${separator}${preview}`;
+    });
+    return [...splitLines, ...fullWidthFooter];
+  }
+
   return {
     render(width: number): string[] {
+      lastRenderWidth = width;
       const now = Date.now();
       if (repo && now - browser.lastPollTime > POLL_INTERVAL_MS) {
         browser.lastPollTime = now;
@@ -1234,7 +1276,7 @@ export function createFileBrowser(
         return viewer.render(width);
       }
 
-      return renderBrowser(width);
+      return renderBrowserWithPreview(width);
     },
 
     handleInput(data: string): void {

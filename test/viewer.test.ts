@@ -111,6 +111,27 @@ describe("file viewer word wrapping", () => {
 
     expect(viewer.render(12).some(line => line.includes("█"))).toBe(true);
   });
+
+  it("does not highlight a current line in a read-only preview", async () => {
+    const filePath = await createSourceFile("const value = 1;\n");
+    const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
+    preview.setFile({ name: "preview.ts", path: filePath, isDirectory: false });
+
+    expect(preview.render(40).some(line => line.includes("<selectedBg>"))).toBe(false);
+    expect(preview.handleInput("j")).toEqual({ type: "none" });
+  });
+
+  it("allows read-only previews to page and jump without enabling edits", async () => {
+    const filePath = await createSourceFile(`${Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n")}\n`);
+    const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
+    preview.setFile({ name: "preview.ts", path: filePath, isDirectory: false });
+    preview.render(40);
+
+    preview.handleInput("G");
+    expect(preview.render(40).join("\n")).toContain("40 │ const line40 = 40;");
+    preview.handleInput("\u0015");
+    expect(preview.handleInput("v")).toEqual({ type: "none" });
+  });
   it("highlights, navigates, and comments by logical source line", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
@@ -187,7 +208,14 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("\u001b[6~");
     const highlighted = viewer.render(24).filter(line => line.includes("<selectedBg>"));
     expect(highlighted).toHaveLength(1);
-    expect(highlighted[0]).toContain("30 │ const line29");
+    expect(highlighted[0]).toContain("15 │ const line14");
+
+    viewer.handleInput("g");
+    viewer.handleInput("\u0004");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("15 │ const line14");
+
+    viewer.handleInput("\u0015");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("1 │ const wrapped");
   });
 
   it("keeps a wrapped diff comment stable across widths", async () => {

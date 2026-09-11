@@ -67,6 +67,7 @@ export interface ViewerController {
 export interface ViewerConfig {
   getRoot: () => string;
   projectCwd: string;
+  readOnly?: boolean;
 }
 
 export function createViewer(
@@ -74,7 +75,7 @@ export function createViewer(
   theme: Theme,
   requestComment: (payload: CommentPayload, comment: string) => void
 ): ViewerController {
-  const { getRoot, projectCwd } = config;
+  const { getRoot, projectCwd, readOnly = false } = config;
   const searchInput = createTextInputBuffer();
   const commentInput = createTextInputBuffer({ preserveNewlines: true });
 
@@ -511,6 +512,8 @@ export function createViewer(
       help = theme.fg("dim", "j/k: extend  c: comment  v/Esc: cancel");
     } else if (state.mode === "search") {
       help = theme.fg("dim", "Type to search  Enter: confirm  Esc: cancel");
+    } else if (readOnly) {
+      help = theme.fg("dim", "Preview — select a file in the browser");
     } else {
       const isUntracked = state.file && isUntrackedStatus(state.file.gitStatus);
       const markdownHelp = isMarkdownFile() && !state.diffMode ? "m: raw/render  " : "";
@@ -585,7 +588,7 @@ export function createViewer(
             const marker = lineIdx === groupEnd(state.selectEnd) ? "▸" : "┃";
             const marked = line.replace("│", theme.fg("accent", marker));
             line = theme.bg("selectedBg", marked + " ".repeat(Math.max(0, width - visibleWidth(marked))));
-          } else if (group === rowGroup(state.cursor)) {
+          } else if (!readOnly && group === rowGroup(state.cursor)) {
             line = theme.bg("selectedBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
           }
           lines.push(line);
@@ -602,6 +605,16 @@ export function createViewer(
 
     handleInput(data: string): ViewerAction {
       if (!state.file) return { type: "none" };
+      if (readOnly) {
+        const halfPage = Math.max(1, Math.floor(state.height / 2));
+        if (matchesKey(data, "g")) state.cursor = 0;
+        else if (matchesKey(data, "shift+g")) state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
+        else if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) moveCursorByGroups(1, halfPage);
+        else if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) moveCursorByGroups(-1, halfPage);
+        else return { type: "none" };
+        ensureCursorVisible();
+        return { type: "none" };
+      }
 
       if (state.mode === "comment") {
         if (matchesKey(data, "ctrl+enter") || matchesKey(data, "ctrl+d") || matchesKey(data, "alt+enter")) {
@@ -690,31 +703,32 @@ export function createViewer(
         }
         return { type: "none" };
       }
-      if (matchesKey(data, Key.pageDown)) {
+      const halfPage = Math.max(1, Math.floor(state.height / 2));
+      if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) {
         if (state.mode === "select") {
-          for (let step = 0; step < state.height; step++) {
+          for (let step = 0; step < halfPage; step++) {
             const next = stepGroup(state.selectEnd, 1);
             if (next === null) break;
             state.selectEnd = state.cursor = next;
           }
           ensureCursorVisible();
         } else {
-          moveCursorByGroups(1, state.height);
+          moveCursorByGroups(1, halfPage);
         }
         ensureCursorVisible();
         return { type: "none" };
       }
-      if (matchesKey(data, Key.pageUp)) {
+      if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) {
         if (state.mode === "select") {
           const start = groupStart(state.selectStart);
-          for (let step = 0; step < state.height; step++) {
+          for (let step = 0; step < halfPage; step++) {
             const previous = stepGroup(state.selectEnd, -1);
             if (previous === null || previous < start) break;
             state.selectEnd = state.cursor = previous;
           }
           ensureCursorVisible();
         } else {
-          moveCursorByGroups(-1, state.height);
+          moveCursorByGroups(-1, halfPage);
         }
         ensureCursorVisible();
         return { type: "none" };

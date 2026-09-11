@@ -17,6 +17,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Usability
 
 - [x] Show non-blocking errors for directory scan/expansion failures and Git metadata failures inside confirmed Git repositories; preserve browsing and distinguish valid empty and non-Git states.
+- [x] Add a read-only, responsive browser preview: use a 3:7 tree/preview split on wide terminals; fall back to the existing single-column tree on narrow terminals.
 
 ### Performance and reliability
 

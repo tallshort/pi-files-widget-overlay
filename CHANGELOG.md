@@ -7,6 +7,13 @@ All notable changes to this extension will be documented in this file.
 ### Fixed
 - Prevent image files from being decoded as text in the overlay; show a safe placeholder instead.
 - Retain the current rendered-Markdown paragraph across terminal-width changes when a matching anchor is available.
+- Keep browser selection, Git status, and comment cursors legible across terminal widths and themes.
+
+### Changed
+- Make viewer paging keys (`PgUp`/`PgDn`, `Ctrl-U`/`Ctrl-D`) move by half a page.
+### Added
+- Show a read-only 3:7 file preview beside the browser tree on wide terminals.
+- Let preview navigation use `g/G`, `PgUp/PgDn`, and `Ctrl-U/Ctrl-D` without enabling edits.
 
 ## [0.3.0] - 2026-09-10
 
