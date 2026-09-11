@@ -1,13 +1,14 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, mkdir, rm, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { getResponsivePanelHeight, OVERLAY_MAX_HEIGHT_RATIO } from "../src/constants.ts";
+import { formatCommentMessage } from "../src/comment.ts";
 import { loadFileContent } from "../src/file-viewer.ts";
 import { createViewer, type CommentPayload } from "../src/viewer.ts";
 const execFile = promisify(execFileCallback);
@@ -194,6 +195,31 @@ describe("file viewer word wrapping", () => {
     ]);
   });
 
+  it("sends a file-level comment from selection mode", async () => {
+    const filePath = await createSourceFile();
+    const comments: Array<{ payload: CommentPayload; comment: string }> = [];
+    const viewer = createViewer(
+      { getRoot: () => dirname(filePath), projectCwd: dirname(filePath) },
+      theme,
+      (payload, comment) => comments.push({ payload, comment })
+    );
+    viewer.setFile({ name: "wrapped.ts", path: filePath, isDirectory: false });
+    viewer.render(24);
+    viewer.handleInput("v");
+    expect(viewer.render(80).at(-1)).toContain("C: file comment");
+    viewer.handleInput("j");
+    viewer.handleInput("C");
+    viewer.handleInput("whole file");
+    viewer.handleInput("\u0004");
+
+    expect(comments).toEqual([
+      {
+        payload: expect.objectContaining({ relPath: "wrapped.ts", lineRange: "file", selectedText: "", isFile: true }),
+        comment: "whole file",
+      },
+    ]);
+    expect(formatCommentMessage(comments[0]!.payload, comments[0]!.comment)).toBe("@wrapped.ts: whole file\n");
+  });
   it("keeps the logical cursor and comment range after a width change", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];

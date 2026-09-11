@@ -85,6 +85,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `n` / `N`: next/prev match
 - `v`: select mode (line selection)
 - `c`: comment on selected lines (inline prompt)
+- `C` (while selecting): comment on the whole file as `@file: comment`
 - `Enter`: new line in the comment editor
 - `Ctrl+Enter` or `Ctrl+D`: send the comment (`Alt+Enter` also works when supported)
 - `]` / `[`: next/prev changed file

@@ -24,6 +24,7 @@ export interface CommentPayload {
   ext: string;
   selectedText: string;
   isDiff?: boolean;
+  isFile?: boolean;
 }
 
 export type ViewerAction =
@@ -46,6 +47,7 @@ interface ViewerState {
   selectStart: number;
   selectEnd: number;
   commentText: string;
+  commentScope: "selection" | "file";
   searchQuery: string;
   searchMatches: number[];
   searchIndex: number;
@@ -93,6 +95,7 @@ export function createViewer(
     selectStart: 0,
     selectEnd: 0,
     commentText: "",
+    commentScope: "selection",
     searchQuery: "",
     searchMatches: [],
     searchIndex: 0,
@@ -139,6 +142,7 @@ export function createViewer(
 
   function resetComment(): void {
     state.commentText = "";
+    state.commentScope = "selection";
   }
 
   function clearSelection(): void {
@@ -405,6 +409,13 @@ export function createViewer(
   function buildCommentPayload(): CommentPayload | null {
     if (!state.file) return null;
 
+    const rel = relative(projectCwd, state.file.path);
+    const relPath = !rel || rel.startsWith("..") ? state.file.path : rel;
+    const ext = state.diffMode ? "diff" : state.file.name.split(".").pop() || "";
+    if (state.commentScope === "file") {
+      return { relPath, lineRange: "file", ext, selectedText: "", isFile: true };
+    }
+
     const rawLines = state.rawContent.split("\n");
     const bounds = selectionBounds();
     const selectedText = state.diffMode
@@ -413,14 +424,11 @@ export function createViewer(
           .map(line => line.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").replace(/^([+-]?)\s*\d+\s│\s?/, "$1 "))
           .join("\n")
       : rawLines.slice(bounds.start, bounds.end + 1).join("\n");
-    const rel = relative(projectCwd, state.file.path);
-    const relPath = !rel || rel.startsWith("..") ? state.file.path : rel;
     const lineRange = state.diffMode
       ? `diff lines ${bounds.start + 1}-${bounds.end + 1}`
       : bounds.start === bounds.end
         ? `line ${bounds.start + 1}`
         : `lines ${bounds.start + 1}-${bounds.end + 1}`;
-    const ext = state.diffMode ? "diff" : state.file.name.split(".").pop() || "";
 
     return { relPath, lineRange, ext, selectedText, isDiff: state.diffMode };
   }
@@ -522,7 +530,7 @@ export function createViewer(
     if (state.mode === "comment") {
       help = theme.fg("dim", "Enter: newline  Ctrl+Enter/Ctrl+D: send  Esc: cancel");
     } else if (state.mode === "select") {
-      help = theme.fg("dim", "j/k: extend  c: comment  v/Esc: cancel");
+      help = theme.fg("dim", "j/k: extend  c: line comment  C: file comment  v/Esc: cancel");
     } else if (state.mode === "search") {
       help = theme.fg("dim", "Type to search  Enter: confirm  Esc: cancel");
     } else if (readOnly) {
@@ -821,7 +829,14 @@ export function createViewer(
         state.selectEnd = state.cursor;
         return { type: "none" };
       }
+      if (matchesKey(data, "shift+c") && state.mode === "select") {
+        state.commentScope = "file";
+        state.mode = "comment";
+        state.commentText = "";
+        return { type: "none" };
+      }
       if (matchesKey(data, "c") && state.mode === "select") {
+        state.commentScope = "selection";
         state.mode = "comment";
         state.commentText = "";
         return { type: "none" };

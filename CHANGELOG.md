@@ -4,6 +4,8 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+### Added
+- Add `C` in viewer selection mode for whole-file comments without line context.
 ## [0.4.0] - 2026-09-11
 
 ### Fixed

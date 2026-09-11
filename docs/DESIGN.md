@@ -29,7 +29,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 - `v` starts or ends selection. The selection uses the existing gutter: `▸` marks the endpoint and `┃` marks the intervening lines.
 - For Markdown, `m` toggles rendered and raw source. Searching or selecting rendered Markdown first switches to raw mode, keeping match positions and comments source-aligned. On a terminal-width change, the viewer restores the current paragraph by matching rendered text; if no match is available, it resets to the top.
 - `d` toggles the unified diff of a changed tracked file. The extension removes Git's file headers and hunk metadata before displaying selectable diff lines. Comments use the visible diff excerpt and identify it as a diff comment rather than treating display positions as source line numbers.
-- `c` opens a multiline comment editor. `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment. When Pi is streaming, the comment is queued as a follow-up; otherwise it is sent immediately.
+- `c` opens a multiline comment editor for the selected lines. In selection mode, `C` opens the same editor for the whole file and sends `@file: comment` without line or selected-text context. `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment. When Pi is streaming, the comment is queued as a follow-up; otherwise it is sent immediately.
 - `q`, `Esc`, or `←` return from the viewer to the browser. `q` or `Esc` from the browser closes the overlay.
 
 ## Architecture
