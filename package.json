@@ -26,7 +26,7 @@
     "extensions": [
       "src/index.ts"
     ],
-    "image": "https://raw.githubusercontent.com/tallshort/pi-files-widget-overlay/main/demo.png"
+    "image": "https://raw.githubusercontent.com/tallshort/pi-files-widget-overlay/main/gallery-preview.png"
   },
   "devDependencies": {
     "@earendil-works/pi-coding-agent": "^0.80.3",
