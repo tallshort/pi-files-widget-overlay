@@ -4,6 +4,11 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.1] - 2026-09-12
+
+### Changed
+- Add a compact Gallery preview image for the Pi Packages listing.
+
 ## [0.6.0] - 2026-09-12
 
 ### Added
