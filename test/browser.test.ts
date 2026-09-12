@@ -56,6 +56,14 @@ async function createNestedRepository(): Promise<string> {
 function waitForBackgroundWork(): Promise<void> {
   return new Promise(resolve => setTimeout(resolve, 75));
 }
+
+async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
+  const deadline = Date.now() + timeoutMs;
+  while (!condition()) {
+    if (Date.now() >= deadline) throw new Error("Timed out waiting for browser state");
+    await new Promise(resolve => setTimeout(resolve, 20));
+  }
+}
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
 });
@@ -349,6 +357,24 @@ describe("file browser expanded changed view", () => {
     expect(rendered).toContain("deep");
     expect(rendered).toContain("changed.ts");
   });
+  it("filters files by content with @", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
+
+    browser.handleInput("@");
+    for (const character of "value = 2") browser.handleInput(character);
+    browser.handleInput("\r");
+    await waitFor(() => {
+      const rendered = browser.render(100).join("\n");
+      return rendered.includes("changed.ts") && !rendered.includes("unchanged.ts");
+    });
+
+    const rendered = browser.render(100).join("\n");
+    expect(rendered).toContain("changed.ts");
+    expect(rendered).not.toContain("unchanged.ts");
+  });
+
   it("shares changed-only state between c and C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

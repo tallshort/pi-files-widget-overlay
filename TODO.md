@@ -55,4 +55,4 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Design evaluation (not scheduled)
 
 - [ ] Evaluate multi-root `/readfiles` support before implementation: decide how roots are defined (arguments, config, or runtime), whether `Tab` cycles or opens a picker, header/position presentation, and missing-root/root-switch reset behavior. Preserve single-root compatibility and keep the selected root temporary.
-- [ ] Evaluate multi-file content search before implementation: add an `@` content filter alongside filename `/` search, group matches by file with counts and line jumps, and use SDK `createGrepTool` (cached per root, `context: 0`, bounded results) rather than spawning grep/rg.
+- [x] Add an `@` content filter alongside filename `/` search, using cached SDK `createGrepTool` with bounded, context-free asynchronous results and cancellation. By design it filters files only; use Viewer `/` to locate individual matches.

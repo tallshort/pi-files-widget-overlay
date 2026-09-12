@@ -16,7 +16,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - `j`/`k` and arrow keys move through the tree; `Enter`, `h`/`l`, and arrow keys open or collapse entries.
 - Directory icons use `▸` and `▾`; symlink directories include a `↗` marker and can be traversed safely.
-- `/` filters the displayed list; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `?` toggles between a curated one-line hint and complete two-line browser keybindings. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
+- `/` filters by filename; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `@` filters by literal file content using a cached per-root Pi SDK grep tool: it debounces input for 150 ms, limits context and result count, cancels pending work on query/root/overlay changes, and discards stale results. `?` toggles between a curated one-line hint and complete two-line browser keybindings. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes asynchronously while the overlay is open. Re-rooting first shows a provisional tree, then resolves repository/status/diff/branch/file-list metadata in the background; results from an earlier root are discarded after re-rooting.
 - A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.

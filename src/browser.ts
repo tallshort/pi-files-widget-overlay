@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
@@ -28,6 +28,8 @@ import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
 import { createTextInputBuffer } from "./input-utils";
 
 const MIN_PREVIEW_WIDTH = 80;
+const CONTENT_SEARCH_DEBOUNCE_MS = 150;
+
 export interface BrowserController {
   getRootPath(): string;
   getActivityLabel(): string;
@@ -61,6 +63,8 @@ interface BrowserState {
   selectedIndex: number;
   searchQuery: string;
   searchMode: boolean;
+  searchKind: "filename" | "content";
+  contentMatches: Set<string>;
   showOnlyChanged: boolean;
   expandedChangedView: boolean;
   expandedForChangedView: Set<string>;
@@ -313,6 +317,8 @@ export function createFileBrowser(
     selectedIndex: 0,
     searchQuery: "",
     searchMode: false,
+    searchKind: "filename",
+    contentMatches: new Set(),
     showOnlyChanged: false,
     expandedChangedView: false,
     expandedForChangedView: new Set<string>(),
@@ -335,8 +341,64 @@ export function createFileBrowser(
   // so work belonging to an old root can never mutate state for the new one.
   let rootGeneration = 0;
   let gitRefreshGeneration: number | null = null;
-
+  let contentSearchGeneration = 0;
+  let contentSearchAbort: AbortController | null = null;
+  let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  const grepTools = new Map<string, ReturnType<typeof createGrepTool>>();
   const normalizeGitPath = (path: string): string => path.split(sep).join("/");
+
+  function clearContentSearch(): void {
+    contentSearchAbort?.abort();
+    if (contentSearchTimer) {
+      clearTimeout(contentSearchTimer);
+      contentSearchTimer = null;
+    }
+    contentSearchAbort = null;
+    contentSearchGeneration += 1;
+    browser.contentMatches.clear();
+  }
+  function scheduleContentSearch(): void {
+    clearContentSearch();
+    if (!browser.searchQuery) return;
+    contentSearchTimer = setTimeout(() => {
+      contentSearchTimer = null;
+      runContentSearch();
+    }, CONTENT_SEARCH_DEBOUNCE_MS);
+  }
+
+  function runContentSearch(): void {
+    clearContentSearch();
+    if (!browser.searchQuery) return;
+    const generation = contentSearchGeneration;
+    const root = rootPath;
+    const controller = new AbortController();
+    contentSearchAbort = controller;
+    let grep = grepTools.get(root);
+    if (!grep) {
+      grep = createGrepTool(root);
+      grepTools.set(root, grep);
+    }
+    void grep.execute("readfiles-content-search", { pattern: browser.searchQuery, path: ".", literal: true, context: 0, limit: 200 }, controller.signal, () => {})
+      .then(result => {
+        if (generation !== contentSearchGeneration || root !== rootPath) return;
+        const matches = new Set<string>();
+        const output = result.content.filter(part => part.type === "text").map(part => part.text).join("\n");
+        for (const line of output.split("\n")) {
+          const match = line.match(/^(.*):(\d+): /);
+          if (match) matches.add(resolve(root, match[1]));
+        }
+        browser.contentMatches = matches;
+        browser.selectedIndex = Math.min(browser.selectedIndex, Math.max(0, getDisplayList().length - 1));
+      })
+      .catch(error => {
+        if (generation === contentSearchGeneration && !controller.signal.aborted) browser.errorMessage = `Content search: ${error.message}`;
+      })
+      .finally(() => {
+        if (generation === contentSearchGeneration) {
+          requestRender();
+        }
+      });
+  }
 
   function activityLabels(): string[] {
     const labels: string[] = [];
@@ -621,6 +683,7 @@ export function createFileBrowser(
       clearTimeout(scanTimer);
       scanTimer = null;
     }
+    clearContentSearch();
   }
 
   function applyAgentModified(): void {
@@ -888,16 +951,15 @@ export function createFileBrowser(
     let list = browser.searchQuery ? browser.fullList : browser.flatList;
 
     if (browser.showOnlyChanged) {
-      list = list.filter(f =>
-        f.node.gitStatus ||
-        f.node.agentModified ||
-        (f.node.isDirectory && f.node.hasChangedChildren)
-      );
+      list = list.filter(f => f.node.gitStatus || f.node.agentModified || (f.node.isDirectory && f.node.hasChangedChildren));
     }
 
     if (browser.searchQuery) {
-      const q = browser.searchQuery.toLowerCase();
-      list = list.filter(f => f.node.name.toLowerCase().includes(q));
+      if (browser.searchKind === "content") list = list.filter(item => !item.node.isDirectory && browser.contentMatches.has(item.node.path));
+      else {
+        const q = browser.searchQuery.toLowerCase();
+        list = list.filter(item => item.node.name.toLowerCase().includes(q));
+      }
     }
 
     return list;
@@ -1016,7 +1078,7 @@ export function createFileBrowser(
     const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";
 
     const searchIndicator = browser.searchMode
-      ? theme.fg("accent", `  /${browser.searchQuery}${CURSOR_MARKER}█`)
+      ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${browser.searchQuery}${CURSOR_MARKER}█`)
       : "";
 
     const header = browser.searchMode
@@ -1029,7 +1091,7 @@ export function createFileBrowser(
     if (displayList.length === 0) {
       const emptyLabel = browser.scanState.isScanning
         ? "  (loading...)"
-        : "  (no files" + (browser.searchQuery ? " matching '" + browser.searchQuery + "'" : "") + ")";
+        : "  (no files" + (browser.searchQuery ? ` matching '${browser.searchQuery}'` : "") + ")";
       lines.push(theme.fg("dim", emptyLabel));
       for (let i = 1; i < browser.browserHeight; i++) {
         lines.push("");
@@ -1084,10 +1146,10 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  /: search  p: preview  ?: help  q: close") + changedIndicator;
+      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  p: preview  ?: help  q: close") + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "h/l←→: folder  PgUp/PgDn: page  c: changed only  C: expand changed"),
-      theme.fg("dim", "[]: prev/next change  /: search  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
+      theme.fg("dim", "[]: change  /: name  @: content  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
@@ -1131,6 +1193,7 @@ export function createFileBrowser(
       if (browser.searchMode) {
         browser.searchMode = false;
         browser.searchQuery = "";
+        clearContentSearch();
         textInput.reset();
       } else {
         textInput.reset();
@@ -1139,16 +1202,19 @@ export function createFileBrowser(
       }
       return;
     }
-    if (matchesKey(data, "/") && !browser.searchMode) {
+    if ((matchesKey(data, "/") || matchesKey(data, "@")) && !browser.searchMode) {
       browser.searchMode = true;
+      browser.searchKind = matchesKey(data, "@") ? "content" : "filename";
       browser.searchQuery = "";
+      clearContentSearch();
       textInput.reset();
       return;
     }
     if (browser.searchMode) {
-      if (matchesKey(data, "/")) {
+      if (matchesKey(data, browser.searchKind === "content" ? "@" : "/")) {
         browser.searchQuery = "";
         browser.selectedIndex = 0;
+        if (browser.searchKind === "content") scheduleContentSearch();
         textInput.reset();
       } else if (matchesKey(data, Key.enter)) {
         browser.searchMode = false;
@@ -1158,6 +1224,7 @@ export function createFileBrowser(
         if (browser.searchQuery) {
           browser.searchQuery = browser.searchQuery.slice(0, -1);
           browser.selectedIndex = 0;
+          if (browser.searchKind === "content") scheduleContentSearch();
         } else {
           browser.searchMode = false;
           textInput.reset();
@@ -1171,6 +1238,7 @@ export function createFileBrowser(
         if (text) {
           browser.searchQuery += text;
           browser.selectedIndex = 0;
+          if (browser.searchKind === "content") scheduleContentSearch();
         }
       }
       return;
