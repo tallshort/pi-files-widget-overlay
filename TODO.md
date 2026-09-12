@@ -44,7 +44,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 
 ### Performance
 
-- [ ] Evaluate lazy-loading browser modules: inspect whether `src/index.ts` eagerly imports tree, viewer, Git, and search modules; if so, move browser-only imports behind `/readfiles` command invocation without changing manifest, dependencies, or behavior. Benchmark before/after and document the result in README when adopted.
+- [x] Confirm browser modules are already lazy-loaded: `src/index.ts` dynamically imports `./browser` only inside the `/readfiles` handler, so tree, viewer, Git, and search modules do not load at extension startup. No equivalent startup optimization remains in this module graph.
 
 ### Usability
 
