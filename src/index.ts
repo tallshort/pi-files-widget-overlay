@@ -73,22 +73,29 @@ function isAccessibleDirectory(path: string): boolean {
   }
 }
 
-export function resolveRestoredPosition(defaultPath: string, position: BrowsePosition | null): { rootPath: string; directoryPath: string; selectedFilePath?: string } {
-  if (!position || !isAccessibleDirectory(position.rootPath)) return { rootPath: defaultPath, directoryPath: defaultPath };
+export type ResolvedBrowsePosition = {
+  rootPath: string;
+  directoryPath: string;
+  selectedFilePath?: string;
+  restored: boolean;
+};
+
+export function resolveRestoredPosition(defaultPath: string, position: BrowsePosition | null): ResolvedBrowsePosition {
+  if (!position || !isAccessibleDirectory(position.rootPath)) return { rootPath: defaultPath, directoryPath: defaultPath, restored: false };
   const relativeDirectory = relative(position.rootPath, position.directoryPath);
   if (relativeDirectory === ".." || relativeDirectory.startsWith(`..${sep}`) || !isAccessibleDirectory(position.directoryPath)) {
-    return { rootPath: defaultPath, directoryPath: defaultPath };
+    return { rootPath: defaultPath, directoryPath: defaultPath, restored: false };
   }
   if (position.selectedFilePath) {
     try {
       if (statSync(position.selectedFilePath).isFile() && dirname(position.selectedFilePath) === position.directoryPath) {
-        return { rootPath: position.rootPath, directoryPath: position.directoryPath, selectedFilePath: position.selectedFilePath };
+        return { rootPath: position.rootPath, directoryPath: position.directoryPath, selectedFilePath: position.selectedFilePath, restored: true };
       }
     } catch {
       // The file was removed between close and reopen; restore its directory.
     }
   }
-  return { rootPath: position.rootPath, directoryPath: position.directoryPath };
+  return { rootPath: position.rootPath, directoryPath: position.directoryPath, restored: true };
 }
 function truncatePathTail(path: string, width: number): string {
   if (width <= 0) return "";
@@ -123,8 +130,8 @@ export default function editorExtension(pi: ExtensionAPI): void {
         ? resolveRestoredPosition(resolved.path, lastBrowsePosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
-      const initialDirectoryPath = restored?.directoryPath;
-      const initialSelectedPath = restored?.selectedFilePath;
+      const initialDirectoryPath = restored?.restored ? restored.directoryPath : undefined;
+      const initialSelectedPath = restored?.restored ? restored.selectedFilePath : undefined;
       const { createFileBrowser } = await import("./browser");
 
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {

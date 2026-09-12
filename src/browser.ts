@@ -439,7 +439,7 @@ export function createFileBrowser(
   function scanPendingRestorePath(): void {
     if (!pendingRestorePath || browser.scanState.mode !== "safe" || !browser.root) return;
     const target = relative(rootPath, pendingRestorePath);
-    if (!target || target.startsWith("..") || resolve(rootPath, target) !== pendingRestorePath) return;
+    if (!target || target === ".." || target.startsWith(`..${sep}`) || resolve(rootPath, target) !== pendingRestorePath) return;
 
     const parts = target.split(sep).filter(Boolean);
     let current = browser.root;

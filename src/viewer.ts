@@ -798,7 +798,9 @@ export function createViewer(
         }
         return { type: "none" };
       }
-      if (!state.selectable) return { type: "none" };
+      if (!state.selectable && (matchesKey(data, "/") || matchesKey(data, "v") || matchesKey(data, "c") || matchesKey(data, "shift+c"))) {
+        return { type: "none" };
+      }
       if (matchesKey(data, "/") && state.mode !== "select") {
         switchMarkdownToRaw();
         resetSearch();

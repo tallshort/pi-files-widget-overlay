@@ -316,11 +316,24 @@ describe("file browser expanded changed view", () => {
     await writeFile(selectedFile, "export const selected = true;\n");
     const position = { rootPath: root, directoryPath: directory, selectedFilePath: selectedFile };
 
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile, restored: true });
     await rm(selectedFile);
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory, restored: true });
     await rm(directory, { recursive: true });
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: fallback, directoryPath: fallback });
+    const invalidRestore = resolveRestoredPosition(fallback, position);
+    expect(invalidRestore).toEqual({ rootPath: fallback, directoryPath: fallback, restored: false });
+    const browser = createFileBrowser(
+      invalidRestore.rootPath,
+      new Set(),
+      theme,
+      () => {},
+      () => {},
+      () => {},
+      fallback,
+      invalidRestore.restored ? invalidRestore.selectedFilePath : undefined,
+      invalidRestore.restored ? invalidRestore.directoryPath : undefined
+    );
+    expect(browser.getRestorePath()).toBeNull();
   });
 
   it("shows the active browser search query", async () => {
@@ -466,7 +479,7 @@ describe("file browser expanded changed view", () => {
   it("scans only the restored nested path after entering safe mode", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-safe-"));
     directories.push(root);
-    const directory = join(root, "restored", "nested");
+    const directory = join(root, "..restored", "nested");
     const selectedFile = join(directory, "selected.ts");
     await mkdir(directory, { recursive: true });
     await writeFile(selectedFile, "export const selected = true;\n");

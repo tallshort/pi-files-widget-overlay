@@ -189,6 +189,7 @@ export function loadFileContent(
         }
         const unsafeDiffKind = getUnsafeFileKind(Buffer.from(diffOutput, "utf-8"));
         if (unsafeDiffKind) return unsafeDiffPlaceholder(unsafeDiffKind);
+        diffOutput = diffOutput.replace(/\r\n/g, "\n");
         return { ...renderUnifiedDiff(diffOutput, termWidth, theme, wordWrap), renderedMarkdown: false };
       } catch (e: any) {
         return { lines: [`Diff error: ${e.message}`], rowGroups: [0], logicalLines: [`Diff error: ${e.message}`], renderedMarkdown: false };

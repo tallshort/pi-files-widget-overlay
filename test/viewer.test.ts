@@ -182,6 +182,37 @@ describe("file viewer word wrapping", () => {
     expect(control.lines[0]).toBe("Preview unavailable: terminal-control file.");
   });
 
+  it("normalizes CRLF Git diff output before rendering", async () => {
+    const { root, filePath } = await createChangedFile("crlf-diff.ts", "const first = 1;\r\n", "const first = 2;\r\n");
+
+    const loaded = loadFileContent(filePath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+
+    expect(loaded.lines.join("\n")).not.toContain("\r");
+    expect(loaded.logicalLines.join("\n")).toContain("const first = 2;");
+  });
+
+  it("keeps non-selectable previews navigable while blocking search, selection, and comments", async () => {
+    const filePath = await createSourceFile(new Uint8Array([0x66, 0x6f, 0x6f, 0x00]), "blocked.txt");
+    const comments: string[] = [];
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    viewer.setFile({ name: "blocked.txt", path: filePath, isDirectory: false, gitStatus: "M" });
+    const fullHeight = viewer.render(80).length;
+    expect(viewer.render(80)[0]).toContain("[DIFF]");
+
+    expect(viewer.handleInput("]")).toEqual({ type: "navigate", direction: 1 });
+    expect(viewer.handleInput("[")).toEqual({ type: "navigate", direction: -1 });
+    viewer.handleInput("d");
+    expect(viewer.render(80)[0]).not.toContain("[DIFF]");
+    viewer.handleInput("\u001b[6~");
+    viewer.handleInput("-");
+    expect(viewer.render(80).length).toBeLessThan(fullHeight);
+    viewer.handleInput("/");
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    expect(viewer.render(80)[0]).not.toContain(CURSOR_MARKER);
+    expect(comments).toEqual([]);
+  });
+
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
     const comments: string[] = [];
