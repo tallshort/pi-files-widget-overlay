@@ -33,17 +33,21 @@ async function createSourceFile(
   return filePath;
 }
 
-async function createChangedFile(fileName = "changed.ts"): Promise<{ root: string; filePath: string }> {
+async function createChangedFile(
+  fileName = "changed.ts",
+  initialContent = "export const value = 1;\n",
+  changedContent = "export const value = 2;\n"
+): Promise<{ root: string; filePath: string }> {
   const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
   directories.push(root);
   const filePath = join(root, fileName);
-  await writeFile(filePath, "export const value = 1;\n");
+  await writeFile(filePath, initialContent);
   await execFile("git", ["init"], { cwd: root });
   await execFile("git", ["config", "user.email", "test@example.com"], { cwd: root });
   await execFile("git", ["config", "user.name", "Test User"], { cwd: root });
   await execFile("git", ["add", "."], { cwd: root });
   await execFile("git", ["commit", "-m", "initial"], { cwd: root });
-  await writeFile(filePath, "export const value = 2;\n");
+  await writeFile(filePath, changedContent);
   return { root, filePath };
 }
 
@@ -161,6 +165,13 @@ describe("file viewer word wrapping", () => {
     expect(control.lines[0]).toBe("Preview unavailable: terminal-control file.");
   });
 
+  it("does not render terminal-control content removed from a Git diff", async () => {
+    const { root, filePath } = await createChangedFile("unsafe-diff.txt", "\u001b[31mold\n", "safe\n");
+    const loaded = loadFileContent(filePath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+
+    expect(loaded.lines).toEqual(["Diff preview unavailable: terminal-control content."]);
+    expect(loaded.lines.join("\n")).not.toContain("\u001b");
+  });
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
     const comments: string[] = [];
@@ -217,6 +228,22 @@ describe("file viewer word wrapping", () => {
     expect(preview.render(40).join("\n")).toContain("40 │ const line40 = 40;");
     preview.handleInput("\u0015");
     expect(preview.handleInput("v")).toEqual({ type: "none" });
+  });
+
+  it("clears a preview jump count when switching files", async () => {
+    const lines = `${Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n")}\n`;
+    const firstPath = await createSourceFile(lines, "first-preview.ts");
+    const secondPath = await createSourceFile(lines, "second-preview.ts");
+    const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
+    preview.setFile({ name: "first-preview.ts", path: firstPath, isDirectory: false });
+    preview.render(40);
+    preview.handleInput("1");
+    preview.handleInput("2");
+    preview.setFile({ name: "second-preview.ts", path: secondPath, isDirectory: false });
+    preview.render(40);
+    preview.handleInput("G");
+
+    expect(preview.render(40).join("\n")).toContain("40 │ const line40 = 40;");
   });
 
   it("pages the viewport by half a page and keeps the viewer cursor visible", async () => {

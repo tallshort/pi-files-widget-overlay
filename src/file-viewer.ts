@@ -115,6 +115,11 @@ function unsafeFilePlaceholder(kind: UnsafeFileKind, size: number): LoadedFileCo
   return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
 }
 
+function unsafeDiffPlaceholder(kind: UnsafeFileKind): LoadedFileContent {
+  const lines = [`Diff preview unavailable: ${kind} content.`];
+  return { lines, rowGroups: [0], logicalLines: lines, renderedMarkdown: false };
+}
+
 export interface LoadFileContentOptions {
   cwd: string;
   diffMode: boolean;
@@ -180,7 +185,8 @@ export function loadFileContent(
         if (!diffOutput.trim()) {
           return { lines: ["No diff available - file may be untracked or unchanged"], rowGroups: [0], logicalLines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false };
         }
-
+        const unsafeDiffKind = getUnsafeFileKind(Buffer.from(diffOutput, "utf-8"));
+        if (unsafeDiffKind) return unsafeDiffPlaceholder(unsafeDiffKind);
         return { ...renderUnifiedDiff(diffOutput, termWidth, theme, wordWrap), renderedMarkdown: false };
       } catch (e: any) {
         return { lines: [`Diff error: ${e.message}`], rowGroups: [0], logicalLines: [`Diff error: ${e.message}`], renderedMarkdown: false };

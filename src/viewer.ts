@@ -624,6 +624,7 @@ export function createViewer(
       state.renderMarkdown = isMarkdownPath(file.path);
       state.wordWrap = false;
       state.showFullHelp = false;
+      state.pendingCount = "";
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.lastRenderWidth = 0;

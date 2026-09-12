@@ -7,6 +7,8 @@ All notable changes to this extension will be documented in this file.
 ### Added
 - Let `p` temporarily toggle the wide-terminal browser tree/preview split.
 - Let `?` toggle complete Browser and Viewer keybinding help.
+- Let `@` filter browser files by literal content asynchronously.
+- Restore the last `/readfiles` browse position within a Pi session.
 
 ### Fixed
 - Keep expanded keybinding help within the overlay height when resizing Browser or Viewer panels.
