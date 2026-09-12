@@ -172,6 +172,16 @@ describe("file viewer word wrapping", () => {
     expect(loaded.lines).toEqual(["Diff preview unavailable: terminal-control content."]);
     expect(loaded.lines.join("\n")).not.toContain("\u001b");
   });
+  it("normalizes CRLF while rejecting a bare carriage return", async () => {
+    const crlfPath = await createSourceFile("const first = 1;\r\nconst second = 2;\r\n", "crlf.ts");
+    const crlf = loadFileContent(crlfPath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(crlf.lines.join("\n")).not.toContain("\r");
+
+    const controlPath = await createSourceFile("safe\runsafe\n", "bare-cr.txt");
+    const control = loadFileContent(controlPath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(control.lines[0]).toBe("Preview unavailable: terminal-control file.");
+  });
+
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
     const comments: string[] = [];

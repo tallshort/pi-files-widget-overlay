@@ -92,15 +92,17 @@ function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme, word
 }
 export interface LoadedFileContent extends RenderedLines {
   renderedMarkdown: boolean;
+  selectable?: boolean;
 }
 type UnsafeFileKind = "binary" | "terminal-control";
 
 function getUnsafeFileKind(content: Buffer): UnsafeFileKind | null {
   const text = content.toString("utf-8");
   if (content.includes(0) || !Buffer.from(text, "utf-8").equals(content)) return "binary";
-  for (const character of text) {
-    const codePoint = character.codePointAt(0) ?? 0;
-    if ((codePoint < 0x20 && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) || codePoint === 0x7f || (codePoint >= 0x80 && codePoint <= 0x9f)) {
+  for (let index = 0; index < text.length; index++) {
+    const codePoint = text.codePointAt(index) ?? 0;
+    if (codePoint === 0x0d && text[index + 1] === "\n") continue;
+    if ((codePoint < 0x20 && codePoint !== 0x09 && codePoint !== 0x0a) || codePoint === 0x7f || (codePoint >= 0x80 && codePoint <= 0x9f)) {
       return "terminal-control";
     }
   }
@@ -112,12 +114,12 @@ function unsafeFilePlaceholder(kind: UnsafeFileKind, size: number): LoadedFileCo
     `Preview unavailable: ${kind} file.`,
     `Size: ${(size / 1024).toFixed(1)} KiB. Open the file externally to inspect it.`,
   ];
-  return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
+  return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false };
 }
 
 function unsafeDiffPlaceholder(kind: UnsafeFileKind): LoadedFileContent {
   const lines = [`Diff preview unavailable: ${kind} content.`];
-  return { lines, rowGroups: [0], logicalLines: lines, renderedMarkdown: false };
+  return { lines, rowGroups: [0], logicalLines: lines, renderedMarkdown: false, selectable: false };
 }
 
 export interface LoadFileContentOptions {
@@ -152,12 +154,12 @@ export function loadFileContent(
         `Image preview is unavailable in the overlay (${(size / 1024).toFixed(1)} KiB).`,
         "Open the file with an external image viewer instead.",
       ];
-      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
+      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false };
     }
     const bytes = readFileSync(filePath);
     const unsafeKind = getUnsafeFileKind(bytes);
     if (unsafeKind) return unsafeFilePlaceholder(unsafeKind, bytes.length);
-    const raw = bytes.toString("utf-8");
+    const raw = bytes.toString("utf-8").replace(/\r\n/g, "\n");
 
     if (diffMode && hasChanges && isGitRepo(cwd)) {
       try {

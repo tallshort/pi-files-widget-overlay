@@ -58,6 +58,7 @@ interface ViewerState {
   height: number;
   pendingCount: string;
   showFullHelp: boolean;
+  selectable: boolean;
 }
 
 export interface ViewerController {
@@ -109,6 +110,7 @@ export function createViewer(
     height: getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8),
     pendingCount: "",
     showFullHelp: false,
+    selectable: true,
   };
 
   function isMarkdownFile(): boolean {
@@ -377,6 +379,11 @@ export function createViewer(
       theme
     );
     state.renderedLines = result;
+    state.selectable = result.selectable !== false;
+    if (!state.selectable) {
+      state.rawContent = "";
+      setMode("normal");
+    }
     const anchoredRow = markdownAnchor && result.renderedMarkdown
       ? findRenderedMarkdownAnchor(markdownAnchor.text, markdownAnchor.rowOffset)
       : null;
@@ -791,6 +798,7 @@ export function createViewer(
         }
         return { type: "none" };
       }
+      if (!state.selectable) return { type: "none" };
       if (matchesKey(data, "/") && state.mode !== "select") {
         switchMarkdownToRaw();
         resetSearch();

@@ -140,19 +140,18 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
   return Array.from(files);
 }
 
-export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean }> {
-    const [trackedResult, statusResult] = await Promise.allSettled([
-      runGit(cwd, ["ls-files", "-z"], 5000),
-      getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }),
-    ]);
-    const files = new Set(trackedResult.status === "fulfilled" ? trackedResult.value.split("\0").filter(Boolean) : []);
-    if (statusResult.status === "fulfilled") {
-      for (const filePath of statusResult.value.status.keys()) files.add(filePath);
-    }
-    return {
-      files: Array.from(files),
-      failed: trackedResult.status === "rejected" && (statusResult.status === "rejected" || statusResult.value.failed),
-    };
+export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean; trackedFailed: boolean }> {
+  const [trackedResult, statusResult] = await Promise.allSettled([
+    runGit(cwd, ["ls-files", "-z"], 5000),
+    getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }),
+  ]);
+  const trackedFailed = trackedResult.status === "rejected";
+  const statusFailed = statusResult.status === "rejected" || (statusResult.status === "fulfilled" && statusResult.value.failed);
+  const files = new Set(trackedResult.status === "fulfilled" ? trackedResult.value.split("\0").filter(Boolean) : []);
+  if (statusResult.status === "fulfilled") {
+    for (const filePath of statusResult.value.status.keys()) files.add(filePath);
+  }
+  return { files: Array.from(files), failed: trackedFailed || statusFailed, trackedFailed };
 }
 
 export function getGitBranch(cwd: string): string {
