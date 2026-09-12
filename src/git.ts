@@ -140,7 +140,7 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
   return Array.from(files);
 }
 
-export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean; trackedFailed: boolean }> {
+export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean; trackedFailed: boolean; statusFailed: boolean }> {
   const [trackedResult, statusResult] = await Promise.allSettled([
     runGit(cwd, ["ls-files", "-z"], 5000),
     getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }),
@@ -151,7 +151,7 @@ export async function getGitFileListAsync(cwd: string): Promise<{ files: string[
   if (statusResult.status === "fulfilled") {
     for (const filePath of statusResult.value.status.keys()) files.add(filePath);
   }
-  return { files: Array.from(files), failed: trackedFailed || statusFailed, trackedFailed };
+  return { files: Array.from(files), failed: trackedFailed || statusFailed, trackedFailed, statusFailed };
 }
 
 export function getGitBranch(cwd: string): string {

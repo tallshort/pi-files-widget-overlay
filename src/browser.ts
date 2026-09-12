@@ -296,6 +296,7 @@ export function createFileBrowser(
   let gitStatus = new Map<string, string>();
   let diffStats = new Map<string, DiffStats>();
   let gitBranch = "";
+  const gitErrors = new Set<string>();
 
   const viewer = createViewer({ getRoot: () => rootPath, projectCwd }, theme, requestComment);
   const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true }, theme, requestComment);
@@ -304,6 +305,7 @@ export function createFileBrowser(
   let previewEnabled = true;
   let showFullHelp = false;
   let pendingRestorePath = initialSelectedPath ? resolve(initialSelectedPath) : initialDirectoryPath ? resolve(initialDirectoryPath) : null;
+  let restoredDirectoryPath = initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
   const textInput = createTextInputBuffer();
 
@@ -457,6 +459,41 @@ export function createFileBrowser(
     }
   }
 
+  function retainRestoredDirectory(root: FileNode): void {
+    if (!restoredDirectoryPath || !getPathInfoSync(restoredDirectoryPath).isDirectory) return;
+    const target = relative(rootPath, restoredDirectoryPath);
+    if (target === ".." || target.startsWith(`..${sep}`) || !target) return;
+
+    let current = root;
+    let currentPath = rootPath;
+    for (const name of target.split(sep).filter(Boolean)) {
+      currentPath = join(currentPath, name);
+      let child = current.children?.find(node => node.path === currentPath);
+      if (!child) {
+        const pathInfo = getPathInfoSync(currentPath);
+        if (!pathInfo.isDirectory) return;
+        child = {
+          name,
+          path: currentPath,
+          isDirectory: true,
+          isSymlink: pathInfo.isSymlink,
+          realPath: pathInfo.realPath,
+          parent: current,
+          children: [],
+          expanded: false,
+          hasChangedChildren: false,
+          gitStatus: gitStatus.get(normalizeGitPath(relative(rootPath, currentPath))),
+          diffStats: diffStats.get(normalizeGitPath(relative(rootPath, currentPath))),
+        };
+        current.children ??= [];
+        current.children.push(child);
+        sortChildren(current);
+      }
+      if (!child.isDirectory) return;
+      current = child;
+    }
+  }
+
   function replaceTree(root: FileNode): void {
     const selectedPath = getDisplayList()[browser.selectedIndex]?.node.path;
     const expandedPaths = new Set(
@@ -473,6 +510,9 @@ export function createFileBrowser(
     lineCountQueue.length = 0;
     lineCountPending.clear();
 
+    // Git does not list empty directories. Keep a restored directory in the
+    // replacement tree so reopening an empty folder remains a valid location.
+    retainRestoredDirectory(root);
     browser.root = root;
     browser.scanState.mode = "none";
     browser.scanState.isScanning = false;
@@ -508,7 +548,12 @@ export function createFileBrowser(
   }
 
   function reportGitError(operation: string): void {
-    reportError(`${operation} unavailable`);
+    gitErrors.add(`${operation} unavailable`);
+    requestRender();
+  }
+
+  function clearGitError(operation: string): void {
+    gitErrors.delete(`${operation} unavailable`);
   }
 
   function focusFirstChild(directory: FileNode): boolean {
@@ -892,21 +937,36 @@ export function createFileBrowser(
     const currentPath = previousDisplayList[browser.selectedIndex]?.node.path;
     const viewingFile = viewer.getFile();
     const viewingFilePath = viewingFile?.path;
+    const retryFileList = !usesGitTree;
     gitRefreshGeneration = generation;
 
-    void Promise.all([getGitStatusAsync(refreshRoot, { includeUntracked: true }), getGitDiffStatsAsync(refreshRoot), getGitBranchAsync(refreshRoot)])
-      .then(([statusResult, diffStatsResult, branch]) => {
+    void Promise.all([
+      getGitStatusAsync(refreshRoot, { includeUntracked: true }),
+      getGitDiffStatsAsync(refreshRoot),
+      getGitBranchAsync(refreshRoot),
+      retryFileList ? getGitFileListAsync(refreshRoot) : Promise.resolve(null),
+    ])
+      .then(([statusResult, diffStatsResult, branch, fileListResult]) => {
         if (generation !== rootGeneration) return;
 
-        if (statusResult.failed) reportGitError("Git status");
+        if (statusResult.failed || fileListResult?.statusFailed) reportGitError("Git status");
+        else clearGitError("Git status");
         if (diffStatsResult.failed) reportGitError("Git diff statistics");
-        if (!statusResult.failed && !diffStatsResult.failed && browser.errorMessage?.endsWith(" unavailable")) {
-          browser.errorMessage = null;
-        }
+        else clearGitError("Git diff statistics");
+        if (fileListResult?.trackedFailed) reportGitError("tracked file list");
+        else if (fileListResult) clearGitError("tracked file list");
 
         if (!statusResult.failed) gitStatus = statusResult.status;
         if (!diffStatsResult.failed) diffStats = diffStatsResult.stats;
         gitBranch = branch;
+
+        // Keep the filesystem scan as the usable tree until every list needed
+        // to build a Git tree succeeds. This includes the status half of the
+        // listing, which supplies untracked paths.
+        if (fileListResult && !statusResult.failed && !fileListResult.failed) {
+          usesGitTree = true;
+          replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
+        }
         applyGitUpdates();
         addUntrackedNodes();
         applyAgentModified();
@@ -939,6 +999,7 @@ export function createFileBrowser(
     treeGeneration += 1;
     rootPath = resolve(newRoot);
     browser.errorMessage = null;
+    gitErrors.clear();
 
     const generation = rootGeneration;
     repo = false;
@@ -992,20 +1053,22 @@ export function createFileBrowser(
       ]);
       if (generation !== rootGeneration) return;
 
-      if (statusResult.failed) reportGitError("Git status");
+      if (statusResult.failed || fileListResult.statusFailed) reportGitError("Git status");
+      else clearGitError("Git status");
       if (diffStatsResult.failed) reportGitError("Git diff statistics");
+      else clearGitError("Git diff statistics");
       if (fileListResult.trackedFailed) reportGitError("tracked file list");
+      else clearGitError("tracked file list");
       repo = true;
       if (!statusResult.failed) gitStatus = statusResult.status;
       if (!diffStatsResult.failed) diffStats = diffStatsResult.stats;
       gitBranch = branch;
-      if (!fileListResult.trackedFailed) {
+      // Preserve the provisional scan if either Git listing operation failed.
+      // A later metadata refresh retries the listing before publishing a Git tree.
+      if (!statusResult.failed && !fileListResult.failed) {
         usesGitTree = true;
         replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
       } else if (browser.root) {
-        // A failed tracked listing must not discard the provisional filesystem
-        // tree or stop its scan. Apply every independently successful metadata
-        // result to the tree that remains browsable.
         applyGitUpdates();
         addUntrackedNodes();
         applyAgentModified();
@@ -1025,6 +1088,7 @@ export function createFileBrowser(
       viewer.close();
     }
     pendingRestorePath = null;
+    restoredDirectoryPath = null;
     stopBackgroundTasks();
     scanQueue.length = 0;
     scanQueued.clear();
@@ -1164,8 +1228,8 @@ export function createFileBrowser(
     if (stats.deletions > 0) statsDisplay += theme.fg("error", ` -${stats.deletions}`);
 
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
-    const errorIndicator = browser.errorMessage ? theme.fg("error", ` [${browser.errorMessage}]`) : "";
-
+    const errors = [browser.errorMessage, ...gitErrors].filter((message): message is string => Boolean(message));
+    const errorIndicator = errors.length > 0 ? theme.fg("error", ` [${errors.join("; ")}]`) : "";
     const searchIndicator = browser.searchMode
       ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${browser.searchQuery}${CURSOR_MARKER}█`)
       : "";

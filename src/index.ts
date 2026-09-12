@@ -7,13 +7,37 @@
 
 import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { statSync } from "node:fs";
+import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
 import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
 import { getObservedToolActivityPath } from "./activity";
+
+const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/** Read-only opt-in: malformed, absent, or non-boolean settings stay disabled. */
+export function readRestoreBrowsePositionSetting(settingsPath = join(homedir(), ".pi", "agent", "settings.json")): boolean {
+  try {
+    const settings: unknown = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    if (!settings || typeof settings !== "object") return false;
+    const namespace = (settings as Record<string, unknown>).piFilesWidgetOverlay;
+    return !!namespace && typeof namespace === "object" && (namespace as Record<string, unknown>).restoreBrowsePosition === true;
+  } catch {
+    return false;
+  }
+}
+
+export function sanitizeRestorePathLabel(path: string): string {
+  return path.replace(CONTROL_CHARACTERS, "�");
+}
+
+export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
+  const activityWidth = activity ? visibleWidth(` ${activity}`) : 0;
+  const availableWidth = Math.max(0, innerWidth - prefixWidth - 1 - activityWidth);
+  return { availableWidth, rootWidth: hasRestorePath ? Math.floor(availableWidth / 2) : availableWidth };
+}
 
 function resolveInitialPath(arg: string | undefined, cwd: string): { path: string; error?: string } {
   if (!arg) return { path: cwd };
@@ -83,6 +107,7 @@ function truncatePathTail(path: string, width: number): string {
 export default function editorExtension(pi: ExtensionAPI): void {
   const cwd = process.cwd();
   const agentModifiedFiles = new Set<string>();
+  const restoreBrowsePosition = readRestoreBrowsePositionSetting();
   let lastBrowsePosition: BrowsePosition | null = null;
   pi.registerCommand("readfiles", {
     description: "Open file browser as a floating overlay (optional: /readfiles <path> to start outside the current directory)",
@@ -94,7 +119,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
         return;
       }
       const hasExplicitPath = Boolean(args?.trim());
-      const restored = !hasExplicitPath && lastBrowsePosition ? resolveRestoredPosition(resolved.path, lastBrowsePosition) : undefined;
+      const restored = restoreBrowsePosition && !hasExplicitPath && lastBrowsePosition
+        ? resolveRestoredPosition(resolved.path, lastBrowsePosition)
+        : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
       const initialDirectoryPath = restored?.directoryPath;
       const initialSelectedPath = restored?.selectedFilePath;
@@ -109,7 +136,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
             clearInterval(pollInterval);
             pollInterval = null;
           }
-          captureBrowsePosition?.();
+          if (restoreBrowsePosition) captureBrowsePosition?.();
           done();
         };
 
@@ -136,9 +163,11 @@ export default function editorExtension(pi: ExtensionAPI): void {
           initialSelectedPath,
           initialDirectoryPath
         );
-        captureBrowsePosition = () => {
-          lastBrowsePosition = browser.getBrowsePosition();
-        };
+        if (restoreBrowsePosition) {
+          captureBrowsePosition = () => {
+            lastBrowsePosition = browser.getBrowsePosition();
+          };
+        }
 
         pollInterval = setInterval(() => {
           requestRender();
@@ -158,12 +187,13 @@ export default function editorExtension(pi: ExtensionAPI): void {
           const activity = browser.getActivityLabel();
           const restoredPath = browser.getRestorePath();
           const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ");
-          const availableWidth = Math.max(0, innerWidth - visibleWidth(prefix) - 1);
-          const rootWidth = restoredPath ? Math.floor(availableWidth / 2) : availableWidth;
-          const root = truncatePathTail(browser.getRootPath(), rootWidth);
+          const safeRootPath = sanitizeRestorePathLabel(browser.getRootPath());
+          const safeRestoredPath = restoredPath ? sanitizeRestorePathLabel(restoredPath) : null;
+          const { availableWidth, rootWidth } = getOverlayPathWidths(innerWidth, visibleWidth(prefix), activity, !!safeRestoredPath);
+          const root = truncatePathTail(safeRootPath, rootWidth);
           const restoredPrefix = " ↳ restored: ";
-          const restored = restoredPath
-            ? theme.fg("dim", `${restoredPrefix}${truncatePathTail(restoredPath, Math.max(0, availableWidth - visibleWidth(root) - visibleWidth(restoredPrefix)))}`)
+          const restored = safeRestoredPath
+            ? theme.fg("dim", `${restoredPrefix}${truncatePathTail(safeRestoredPath, Math.max(0, availableWidth - visibleWidth(root) - visibleWidth(restoredPrefix)))}`)
             : "";
           const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + " ");
 

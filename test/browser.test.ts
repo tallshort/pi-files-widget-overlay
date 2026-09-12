@@ -10,7 +10,7 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { resolveRestoredPosition } from "../src/index.ts";
+import { getOverlayPathWidths, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -203,13 +203,62 @@ describe("file browser expanded changed view", () => {
       vi.resetModules();
     }
   });
+  it("keeps the provisional tree when the status half of the Git listing fails", async () => {
+    vi.resetModules();
+    vi.doMock("../src/git.ts", async importOriginal => {
+      const actual = await importOriginal<typeof import("../src/git.ts")>();
+      return {
+        ...actual,
+        getGitFileListAsync: async () => ({ files: [], failed: true, trackedFailed: false, statusFailed: true }),
+      };
+    });
+    try {
+      const { createFileBrowser: createFailedStatusBrowser } = await import("../src/browser.ts");
+      const root = await createChangedRepository();
+      const browser = createFailedStatusBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+      await waitFor(() => browser.render(100).join("\n").includes("unchanged.ts"));
+      expect(browser.render(100).join("\n")).toContain("changed.ts");
+    } finally {
+      vi.doUnmock("../src/git.ts");
+      vi.resetModules();
+    }
+  });
+
+  it("keeps a restored empty directory after Git replaces the provisional tree", async () => {
+    const root = await createChangedRepository();
+    const emptyDirectory = join(root, "empty");
+    await mkdir(emptyDirectory);
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, undefined, emptyDirectory);
+
+    await waitFor(() => browser.getBrowsePosition().directoryPath === emptyDirectory);
+    expect(browser.getRestorePath()).toBe("empty");
+  });
+
+  it("reads browse-position restoration only from the explicit global opt-in", async () => {
+    const settingsDirectory = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-settings-"));
+    directories.push(settingsDirectory);
+    const settings = join(settingsDirectory, "settings.json");
+    await writeFile(settings, JSON.stringify({ piFilesWidgetOverlay: { restoreBrowsePosition: true } }));
+    expect(readRestoreBrowsePositionSetting(settings)).toBe(true);
+    await writeFile(settings, JSON.stringify({ piFilesWidgetOverlay: { restoreBrowsePosition: "true" } }));
+    expect(readRestoreBrowsePositionSetting(settings)).toBe(false);
+    await writeFile(settings, "not JSON");
+    expect(readRestoreBrowsePositionSetting(settings)).toBe(false);
+  });
+
+  it("sanitizes restore labels and reserves header room for scanning", () => {
+    expect(sanitizeRestorePathLabel("safe\u001b[31mname")).toBe("safe�[31mname");
+    expect(getOverlayPathWidths(40, 10, "… scanning", true)).toEqual({ availableWidth: 18, rootWidth: 9 });
+  });
+
   it("keeps the provisional tree and applies status when tracked Git listing fails", async () => {
     vi.resetModules();
     vi.doMock("../src/git.ts", async importOriginal => {
       const actual = await importOriginal<typeof import("../src/git.ts")>();
       return {
         ...actual,
-        getGitFileListAsync: async () => ({ files: [], failed: true, trackedFailed: true }),
+        getGitFileListAsync: async () => ({ files: [], failed: true, trackedFailed: true, statusFailed: false }),
       };
     });
     try {
@@ -230,6 +279,13 @@ describe("file browser expanded changed view", () => {
       const rendered = browser.render(100).join("\n");
       expect(rendered).toContain("changed.ts");
       expect(rendered).toContain(" M");
+      browser.handleInput("p");
+      expect(browser.render(200).join("\n")).toContain("tracked file list unavailable");
+      const now = Date.now();
+      const clock = vi.spyOn(Date, "now").mockReturnValue(now + 3_001);
+      browser.render(100);
+      await waitFor(() => browser.render(200).join("\n").includes("tracked file list unavailable"));
+      clock.mockRestore();
     } finally {
       vi.doUnmock("../src/git.ts");
       vi.resetModules();
