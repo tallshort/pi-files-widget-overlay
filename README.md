@@ -105,7 +105,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - Searching in rendered Markdown switches to raw mode first, and selecting from rendered Markdown first switches you back to raw so line-based matches and comments stay aligned with the source file. On terminal-width changes, rendered Markdown retains the current paragraph when it can match its text; otherwise it resets to the top.
 - When you browse outside the current project directory, inline comments on those files use absolute paths so the agent can still locate them. Files inside the project continue to use project-relative paths.
 - Folder LOCs are shown only when the folder is collapsed (expanded folders would duplicate counts).
-- Image files display a safe placeholder in the overlay instead of attempting to render binary data. Open them in an external image viewer.
+- Image, binary, and terminal-control-character files display a safe metadata placeholder in the overlay instead of attempting to render their bytes. Open them externally to inspect them.
 - Line counts load asynchronously without interrupting browsing; the Files title shows activity only while a directory scan is in progress.
 - Large non-git folders load progressively and may show `[partial]` while loading in safe mode.
 - Git status refreshes every 3 seconds while `/readfiles` is open.

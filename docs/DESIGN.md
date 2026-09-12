@@ -56,7 +56,7 @@ The extension has no external runtime dependency beyond Pi and Node's built-in m
 - Markdown uses Pi TUI's `Markdown` renderer and Pi's Markdown theme.
 - Diffs are generated with argument-based Git commands and parsed from NUL-delimited metadata, preserving special-character and rename/copy paths; unified-diff lines are then colored with Pi theme tokens.
 - Git is optional: browsing and normal file viewing still work outside a repository.
-
+- Images, unknown binary data, and terminal-control characters never reach the renderer; the viewer shows a size-bearing metadata placeholder instead.
 This replaces the upstream use of `bat`, `glow`, and `delta`, avoiding tool-specific palettes and making code, Markdown, and diffs follow the active Pi theme.
 
 ## Design constraints

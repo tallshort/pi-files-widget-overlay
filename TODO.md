@@ -35,7 +35,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 - [x] Harden Git path handling: use argument-based commands and NUL-delimited status/numstat parsing for safe special-character and rename/copy paths.
 - [x] Refresh Git metadata asynchronously, preserving responsive input and discarding stale results after re-rooting.
 - [x] Make Git-backed re-rooting asynchronous: avoid synchronous repository/status/diff/branch/file-list commands in `loadRoot`, preserve a responsive provisional tree, and discard stale results when roots change again.
-- [ ] Safely identify unknown binary and terminal-control-character files before rendering; show a metadata placeholder rather than decoding or emitting unsafe bytes.
+- [x] Safely identify unknown binary and terminal-control-character files before rendering; show a metadata placeholder rather than decoding or emitting unsafe bytes.
 
 ### Agent-awareness
 

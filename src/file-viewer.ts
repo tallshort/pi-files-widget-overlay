@@ -93,6 +93,25 @@ function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme, word
 export interface LoadedFileContent extends RenderedLines {
   renderedMarkdown: boolean;
 }
+type UnsafeFileKind = "binary" | "terminal-control";
+
+function getUnsafeFileKind(content: Buffer): UnsafeFileKind | null {
+  if (content.includes(0) || !Buffer.from(content.toString("utf-8"), "utf-8").equals(content)) return "binary";
+  for (const byte of content) {
+    if ((byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) || byte === 0x7f || (byte >= 0x80 && byte <= 0x9f)) {
+      return "terminal-control";
+    }
+  }
+  return null;
+}
+
+function unsafeFilePlaceholder(kind: UnsafeFileKind, size: number): LoadedFileContent {
+  const lines = [
+    `Preview unavailable: ${kind} file.`,
+    `Size: ${(size / 1024).toFixed(1)} KiB. Open the file externally to inspect it.`,
+  ];
+  return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
+}
 
 export interface LoadFileContentOptions {
   cwd: string;
@@ -128,6 +147,11 @@ export function loadFileContent(
       ];
       return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false };
     }
+    const bytes = readFileSync(filePath);
+    const unsafeKind = getUnsafeFileKind(bytes);
+    if (unsafeKind) return unsafeFilePlaceholder(unsafeKind, bytes.length);
+    const raw = bytes.toString("utf-8");
+
     if (diffMode && hasChanges && isGitRepo(cwd)) {
       try {
         // Try different diff strategies
@@ -162,12 +186,11 @@ export function loadFileContent(
     }
 
     if (isMarkdown && renderMarkdown) {
-      const markdown = new Markdown(readFileSync(filePath, "utf-8"), 0, 0, getMarkdownTheme());
+      const markdown = new Markdown(raw, 0, 0, getMarkdownTheme());
       const lines = markdown.render(wordWrap ? termWidth : 10_000).map(line => line.trimEnd());
       return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: true };
     }
 
-    const raw = readFileSync(filePath, "utf-8");
     const lineNumberWidth = Math.max(4, String(raw.split("\n").length).length);
     const contentWidth = Math.max(1, termWidth - lineNumberWidth - 3);
     const highlighted = highlightCode(raw, getLanguageFromPath(filePath));

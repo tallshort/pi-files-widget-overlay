@@ -139,6 +139,17 @@ describe("file viewer word wrapping", () => {
     expect(loaded.logicalLines).toEqual(loaded.lines);
   });
 
+  it.each([
+    ["binary", new Uint8Array([0x66, 0x6f, 0x6f, 0x00, 0xff])],
+    ["terminal-control", new Uint8Array([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x72, 0x65, 0x64])],
+  ])("shows a safe placeholder for $s files", async (kind, content) => {
+    const filePath = await createSourceFile(content, `unsafe-${kind}.txt`);
+
+    const loaded = loadFileContent(filePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+
+    expect(loaded.lines[0]).toBe(`Preview unavailable: ${kind} file.`);
+    expect(loaded.lines.join("\n")).not.toContain("\u001b");
+  });
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
     const comments: string[] = [];

@@ -10,6 +10,7 @@ All notable changes to this extension will be documented in this file.
 
 ### Fixed
 - Keep expanded keybinding help within the overlay height when resizing Browser or Viewer panels.
+- Replace unknown binary and terminal-control-character file content with safe metadata placeholders.
 
 ### Changed
 - Resolve Git-backed re-root metadata in the background and discard stale root results.
