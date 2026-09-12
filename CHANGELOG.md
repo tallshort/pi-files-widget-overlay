@@ -15,6 +15,7 @@ All notable changes to this extension will be documented in this file.
 
 ### Changed
 - Make preview and viewer page keys scroll content by half a page; the viewer retains its cursor when possible and otherwise moves it to the first visible line.
+- Show the current browser root and stable scan activity in the overlay title.
 - Refresh Git metadata asynchronously so periodic updates do not block overlay rendering.
 - Use argument-based Git commands and NUL-delimited metadata to preserve special-character and rename/copy paths.
 - Add terminal key-sequence coverage and macOS/Linux CI for declared supported platforms.

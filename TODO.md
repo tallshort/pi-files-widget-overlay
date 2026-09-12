@@ -4,11 +4,11 @@ This is the backlog for the current floating-overlay implementation, not the his
 
 ## Completed foundation
 
-- [x] `/readfiles [path]` opens a centered, framed overlay and supports absolute, relative, and `~` paths.
+- [x] `/readfiles [path]` opens a centered, framed overlay, supports absolute, relative, and `~` paths, and identifies the current root plus scan activity in its header.
 - [x] Browse, expand, collapse, search, and re-root directories; directory symlinks are visible and traversable.
 - [x] Show Git status, diff statistics, line counts, changed-only filtering, `C` expansion of changed ancestors, and changed-file navigation.
 - [x] Use Pi's code highlighter, Markdown renderer, and theme colors without `bat`, `glow`, or `delta` runtime dependencies.
-- [x] Provide a line cursor, source-aligned selection, inline comments, file-level comments, and follow-up delivery while the agent is working.
+- [x] Provide a line cursor, source-aligned selection, inline comments with an editable insertion cursor, file-level comments, and follow-up delivery while the agent is working.
 - [x] Render unified diffs internally and send selected visible diff text as a diff comment.
 - [x] Progressively scan large non-Git directories and avoid stale scan results after re-rooting.
 
@@ -17,7 +17,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Usability
 
 - [x] Show non-blocking errors for directory scan/expansion failures and Git metadata failures inside confirmed Git repositories; preserve browsing and distinguish valid empty and non-Git states.
-- [x] Add a read-only, responsive browser preview: use a 3:7 tree/preview split on wide terminals; fall back to the existing single-column tree on narrow terminals.
+- [x] Add a read-only, responsive browser preview: use a 3:7 tree/preview split on wide terminals; fall back to the existing single-column tree on narrow terminals; support preview jumps, half-page scrolling, and wrapping.
 - [x] Keep browser and viewer search input IME-aligned; let repeated `/` clear the query and Backspace cancel an empty search.
 
 ### Performance and reliability

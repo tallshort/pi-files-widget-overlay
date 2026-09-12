@@ -10,7 +10,7 @@ The extension is forked from `tmustier/pi-extensions`' `files-widget`, but its U
 
 Run `/readfiles` to open the browser at the current working directory, or `/readfiles <path>` to start at an absolute, relative, or `~`-prefixed directory. The overlay is centered at 95% terminal width with a one-cell margin, title, and border.
 
-The browser uses a 28-line content area by default. The viewer uses 29 lines by default; either can be resized with `+` and `-` within shared minimum and maximum bounds.
+The browser uses a 28-line content area by default. The viewer uses 29 lines by default; either can be resized with `+` and `-` within shared minimum and maximum bounds. The overlay header identifies the current browser root and shows scan activity without blocking input.
 
 ### Browser
 
