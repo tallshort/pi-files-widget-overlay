@@ -2,10 +2,11 @@
 
 All notable changes to this extension will be documented in this file.
 
-## [Unreleased]
+## [0.5.0] - 2026-09-11
 
 ### Fixed
 - Position browser and viewer search cursors for IME composition; repeated `/` clears the query and Backspace cancels an empty search.
+- Keep comment-editor left/right keys within the editor and use them to move its insertion cursor.
 - Use stable background-activity labels instead of animated spinner frames to avoid terminal refresh artifacts.
 - Avoid double-counting staged Git diff statistics.
 
@@ -13,6 +14,7 @@ All notable changes to this extension will be documented in this file.
 - Add `C` in viewer selection mode for whole-file comments without line context.
 
 ### Changed
+- Make preview and viewer page keys scroll content by half a page; the viewer retains its cursor when possible and otherwise moves it to the first visible line.
 - Refresh Git metadata asynchronously so periodic updates do not block overlay rendering.
 - Use argument-based Git commands and NUL-delimited metadata to preserve special-character and rename/copy paths.
 - Add terminal key-sequence coverage and macOS/Linux CI for declared supported platforms.

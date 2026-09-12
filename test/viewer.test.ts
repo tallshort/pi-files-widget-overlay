@@ -158,6 +158,31 @@ describe("file viewer word wrapping", () => {
     preview.handleInput("\u0015");
     expect(preview.handleInput("v")).toEqual({ type: "none" });
   });
+
+  it("pages the viewport by half a page and keeps the viewer cursor visible", async () => {
+    const filePath = await createSourceFile(`${Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n")}\n`);
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "many.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+
+    viewer.handleInput("\u001b[6~");
+    const paged = viewer.render(80).join("\n");
+    expect(paged).toContain("13 │ const line13 = 13;");
+    expect(paged).not.toContain("1 │ const line1 = 1;");
+    expect(paged).toContain("<selectedBg>  13 │ const line13 = 13;");
+  });
+
+  it("pages a read-only preview by half a page without a hidden cursor", async () => {
+    const filePath = await createSourceFile(`${Array.from({ length: 40 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n")}\n`);
+    const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
+    preview.setFile({ name: "preview.ts", path: filePath, isDirectory: false });
+    preview.render(80);
+
+    preview.handleInput("\u001b[6~");
+    const paged = preview.render(80).join("\n");
+    expect(paged).toContain("13 │ const line13 = 13;");
+    expect(paged).not.toContain("1 │ const line1 = 1;");
+  });
   it("highlights, navigates, and comments by logical source line", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
@@ -205,6 +230,23 @@ describe("file viewer word wrapping", () => {
     ]);
   });
 
+  it("edits comments at the cursor without activating viewer navigation", async () => {
+    const filePath = await createSourceFile();
+    const comments: string[] = [];
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    viewer.setFile({ name: "comment.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("ac");
+    viewer.handleInput("\u001b[D");
+    viewer.handleInput("b");
+    viewer.handleInput("\u0004");
+
+    expect(comments).toEqual(["abc"]);
+  });
+
   it("sends a file-level comment from selection mode", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
@@ -219,6 +261,7 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(80).at(-1)).toContain("C: file comment");
     viewer.handleInput("j");
     viewer.handleInput("C");
+    expect(viewer.render(80).join("\n")).toContain("Comment: whole file");
     viewer.handleInput("whole file");
     viewer.handleInput("\u0004");
 
@@ -249,7 +292,7 @@ describe("file viewer word wrapping", () => {
     expect(comments[0]?.payload).toMatchObject({ lineRange: "line 2", selectedText: "const next = 1;" });
   });
 
-  it("moves by logical lines for page navigation", async () => {
+  it("scrolls the viewport by rendered rows and keeps the logical cursor visible", async () => {
     const lines = ["const wrapped = 'this line is intentionally long enough to wrap';", ...Array.from({ length: 35 }, (_, index) => `const line${index + 1} = ${index + 1};`)];
     const filePath = await createSourceFile(`${lines.join("\n")}\n`);
     const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
@@ -259,14 +302,14 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("\u001b[6~");
     const highlighted = viewer.render(24).filter(line => line.includes("<selectedBg>"));
     expect(highlighted).toHaveLength(1);
-    expect(highlighted[0]).toContain("15 │ const line14");
+    expect(highlighted[0]).toContain("9 │ const line8");
 
     viewer.handleInput("g");
     viewer.handleInput("\u0004");
-    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("15 │ const line14");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("9 │ const line8");
 
     viewer.handleInput("\u0015");
-    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("1 │ const wrapped");
+    expect(viewer.render(24).filter(line => line.includes("<selectedBg>"))[0]).toContain("9 │ const line8");
 
     viewer.handleInput("1");
     viewer.handleInput("2");

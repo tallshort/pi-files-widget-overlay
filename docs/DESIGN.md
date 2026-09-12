@@ -20,18 +20,18 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes asynchronously while the overlay is open, so existing tree state remains interactive until fresh metadata arrives; results from an earlier root are discarded after re-rooting.
 - A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
-- On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Narrow terminals retain the single-column tree.
+- On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Preview page keys scroll its content by half a page without showing a cursor. Narrow terminals retain the single-column tree.
 
 ### Viewer and comments
 
-- The viewer keeps a real line cursor. Navigation moves the cursor and scrolls only as needed to keep it visible; the active line is highlighted. `g`/`G` jump to the top/bottom, and a numeric prefix with `G` jumps to a logical line in the current view.
+- The viewer keeps a real line cursor. `j`/`k` move the cursor and scroll only as needed to keep it visible; the active line is highlighted. `PgUp`/`PgDn` and `Ctrl-U`/`Ctrl-D` scroll the viewport by half a page of rendered rows, retaining the cursor when it remains visible or moving it to the newly visible first logical line. `g`/`G` jump to the top/bottom, and a numeric prefix with `G` jumps to a logical line in the current view.
 - Word wrap is disabled by default; `w` toggles it for code, diffs, and rendered Markdown.
 - `/` opens viewer search; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels it.
 - `v` starts or ends selection. The selection uses the existing gutter: `▸` marks the endpoint and `┃` marks the intervening lines.
 - For Markdown, `m` toggles rendered and raw source. Searching or selecting rendered Markdown first switches to raw mode, keeping match positions and comments source-aligned. On a terminal-width change, the viewer restores the current paragraph by matching rendered text; if no match is available, it resets to the top.
 - `d` toggles the unified diff of a changed tracked file. The extension removes Git's file headers and hunk metadata before displaying selectable diff lines. Comments use the visible diff excerpt and identify it as a diff comment rather than treating display positions as source line numbers.
-- `c` opens a multiline comment editor for the selected lines. In selection mode, `C` opens the same editor for the whole file and sends `@file: comment` without line or selected-text context. `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment. When Pi is streaming, the comment is queued as a follow-up; otherwise it is sent immediately.
-- `q`, `Esc`, or `←` return from the viewer to the browser. `q` or `Esc` from the browser closes the overlay.
+- `c` opens a multiline comment editor for the selected lines. In selection mode, `C` opens the same editor for the whole file and sends `@file: comment` without line or selected-text context. `←`/`→` move the editing cursor; `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment. When Pi is streaming, the comment is queued as a follow-up; otherwise it is sent immediately.
+- In normal viewer mode, `q`, `Esc`, or `←` return to the browser. `Esc` leaves selection or cancels the comment editor; `q` or `Esc` from the browser closes the overlay.
 
 ## Architecture
 

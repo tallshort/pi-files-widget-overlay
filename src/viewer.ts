@@ -47,6 +47,7 @@ interface ViewerState {
   selectStart: number;
   selectEnd: number;
   commentText: string;
+  commentCursor: number;
   commentScope: "selection" | "file";
   searchQuery: string;
   searchMatches: number[];
@@ -95,6 +96,7 @@ export function createViewer(
     selectStart: 0,
     selectEnd: 0,
     commentText: "",
+    commentCursor: 0,
     commentScope: "selection",
     searchQuery: "",
     searchMatches: [],
@@ -142,7 +144,19 @@ export function createViewer(
 
   function resetComment(): void {
     state.commentText = "";
+    state.commentCursor = 0;
     state.commentScope = "selection";
+  }
+
+  function insertCommentText(text: string): void {
+    state.commentText = `${state.commentText.slice(0, state.commentCursor)}${text}${state.commentText.slice(state.commentCursor)}`;
+    state.commentCursor += text.length;
+  }
+
+  function deleteCommentBackward(): void {
+    if (state.commentCursor === 0) return;
+    state.commentText = `${state.commentText.slice(0, state.commentCursor - 1)}${state.commentText.slice(state.commentCursor)}`;
+    state.commentCursor--;
   }
 
   function clearSelection(): void {
@@ -267,6 +281,14 @@ export function createViewer(
       state.cursor = next;
     }
     ensureCursorVisible();
+  }
+
+  function moveViewportByRows(direction: 1 | -1, count: number): void {
+    const nextScroll = state.scroll + direction * count;
+    state.scroll = groupStart(Math.min(getMaxScroll(), Math.max(0, nextScroll)));
+    if (state.cursor < state.scroll || state.cursor >= state.scroll + state.height) {
+      state.cursor = state.scroll;
+    }
   }
 
   function stripAnsi(text: string): string {
@@ -486,7 +508,8 @@ export function createViewer(
   function renderCommentEditor(width: number): string[] {
     const contentWidth = Math.max(1, width - 3);
     const wrappedLines: string[] = [];
-    const logicalLines = state.commentText.split("\n");
+    const commentWithCursor = `${state.commentText.slice(0, state.commentCursor)}█${state.commentText.slice(state.commentCursor)}`;
+    const logicalLines = commentWithCursor.split("\n");
 
     for (const line of logicalLines) {
       if (line.length === 0) {
@@ -497,20 +520,21 @@ export function createViewer(
     }
 
     if (wrappedLines.length === 0) {
-      wrappedLines.push("");
+      wrappedLines.push("█");
     }
 
-    const lastIndex = wrappedLines.length - 1;
-    wrappedLines[lastIndex] = `${wrappedLines[lastIndex]}█`;
-
-    const overflow = Math.max(0, wrappedLines.length - COMMENT_EDITOR_MAX_VISIBLE_LINES);
-    const visibleLines = wrappedLines.slice(-COMMENT_EDITOR_MAX_VISIBLE_LINES);
-    if (overflow > 0 && visibleLines.length > 0) {
+    const cursorLine = Math.max(0, wrappedLines.findIndex(line => line.includes("█")));
+    const visibleStart = Math.min(
+      Math.max(0, cursorLine - COMMENT_EDITOR_MAX_VISIBLE_LINES + 1),
+      Math.max(0, wrappedLines.length - COMMENT_EDITOR_MAX_VISIBLE_LINES)
+    );
+    const visibleLines = wrappedLines.slice(visibleStart, visibleStart + COMMENT_EDITOR_MAX_VISIBLE_LINES);
+    if (visibleStart > 0 && visibleLines.length > 0) {
       visibleLines[0] = `…${visibleLines[0]}`;
     }
 
     return [
-      truncateToWidth(theme.fg("accent", "Comment:"), width),
+      truncateToWidth(theme.fg("accent", state.commentScope === "file" ? "Comment: whole file" : "Comment:"), width),
       ...visibleLines.map(line => truncateToWidth(`  ${theme.fg("text", line)}`, width)),
     ];
   }
@@ -528,7 +552,7 @@ export function createViewer(
 
     let help: string;
     if (state.mode === "comment") {
-      help = theme.fg("dim", "Enter: newline  Ctrl+Enter/Ctrl+D: send  Esc: cancel");
+      help = theme.fg("dim", "←/→: move cursor  Enter: newline  Ctrl+Enter/Ctrl+D: send  Esc: cancel");
     } else if (state.mode === "select") {
       help = theme.fg("dim", "j/k: extend  c: line comment  C: file comment  v/Esc: cancel");
     } else if (state.mode === "search") {
@@ -642,8 +666,8 @@ export function createViewer(
           if (requestedLine !== null) jumpToLine(requestedLine);
           else state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
         }
-        else if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) moveCursorByGroups(1, halfPage);
-        else if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) moveCursorByGroups(-1, halfPage);
+        else if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) moveViewportByRows(1, halfPage);
+        else if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) moveViewportByRows(-1, halfPage);
         else if (matchesKey(data, "w")) {
           state.wordWrap = !state.wordWrap;
           state.lastRenderWidth = 0;
@@ -662,15 +686,19 @@ export function createViewer(
             setMode("normal");
           }
         } else if (matchesKey(data, Key.enter) || matchesKey(data, "shift+enter")) {
-          state.commentText += "\n";
-        } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
+          insertCommentText("\n");
+        } else if (matchesKey(data, Key.escape)) {
           setMode("normal");
+        } else if (matchesKey(data, Key.left)) {
+          state.commentCursor = Math.max(0, state.commentCursor - 1);
+        } else if (matchesKey(data, Key.right)) {
+          state.commentCursor = Math.min(state.commentText.length, state.commentCursor + 1);
         } else if (matchesKey(data, Key.backspace)) {
-          state.commentText = state.commentText.slice(0, -1);
+          deleteCommentBackward();
         } else {
           const text = commentInput.push(data);
           if (text) {
-            state.commentText += text;
+            insertCommentText(text);
           }
         }
         return { type: "none" };
@@ -758,7 +786,7 @@ export function createViewer(
           }
           ensureCursorVisible();
         } else {
-          moveCursorByGroups(1, halfPage);
+          moveViewportByRows(1, halfPage);
         }
         ensureCursorVisible();
         return { type: "none" };
@@ -773,7 +801,7 @@ export function createViewer(
           }
           ensureCursorVisible();
         } else {
-          moveCursorByGroups(-1, halfPage);
+          moveViewportByRows(-1, halfPage);
         }
         ensureCursorVisible();
         return { type: "none" };
@@ -841,12 +869,14 @@ export function createViewer(
         state.commentScope = "file";
         state.mode = "comment";
         state.commentText = "";
+        state.commentCursor = 0;
         return { type: "none" };
       }
       if (matchesKey(data, "c") && state.mode === "select") {
         state.commentScope = "selection";
         state.mode = "comment";
         state.commentText = "";
+        state.commentCursor = 0;
         return { type: "none" };
       }
       if (matchesKey(data, "]") && state.mode !== "select") {
