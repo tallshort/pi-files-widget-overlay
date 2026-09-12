@@ -909,17 +909,17 @@ export function createFileBrowser(
     browser.focusFirstChildOf = null;
     textInput.reset();
     browser.lastPollTime = Date.now();
+    const safeMode = shouldSafeMode(rootPath);
+    browser.scanState.mode = safeMode ? "safe" : "full";
+    browser.scanState.isScanning = false;
+    browser.scanState.isPartial = safeMode;
+    if (browser.root) enqueueScan(browser.root, 0, true);
 
     void (async () => {
       const gitRepo = await isGitRepoAsync(rootPath);
       if (generation !== rootGeneration) return;
 
       if (!gitRepo) {
-        const safeMode = shouldSafeMode(rootPath);
-        browser.scanState.mode = safeMode ? "safe" : "full";
-        browser.scanState.isScanning = false;
-        browser.scanState.isPartial = safeMode;
-        if (browser.root) enqueueScan(browser.root, 0, true);
         requestRender();
         return;
       }
@@ -939,15 +939,21 @@ export function createFileBrowser(
       gitStatus = statusResult.status;
       diffStats = diffStatsResult.stats;
       gitBranch = branch;
-      browser.root = buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles);
-      browser.scanState.mode = "none";
-      browser.scanState.isScanning = false;
-      browser.scanState.isPartial = false;
-      indexNodes(browser.root, browser.nodeByPath);
-      refreshLists();
-      restoreInitialPosition();
+      if (!fileListResult.failed) {
+        browser.root = buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles);
+        browser.scanState.mode = "none";
+        browser.scanState.isScanning = false;
+        browser.scanState.isPartial = false;
+        indexNodes(browser.root, browser.nodeByPath);
+        refreshLists();
+        restoreInitialPosition();
+        queueLineCountsForDirectory(browser.root);
+      } else if (browser.root) {
+        applyGitUpdates();
+        addUntrackedNodes();
+        refreshLists();
+      }
       browser.stats = getTreeStats(browser.root);
-      queueLineCountsForDirectory(browser.root);
       requestRender();
     })();
   }
