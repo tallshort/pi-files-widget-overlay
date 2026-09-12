@@ -94,7 +94,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
         return;
       }
       const hasExplicitPath = Boolean(args?.trim());
-      const restored = hasExplicitPath ? undefined : resolveRestoredPosition(resolved.path, lastBrowsePosition);
+      const restored = !hasExplicitPath && lastBrowsePosition ? resolveRestoredPosition(resolved.path, lastBrowsePosition) : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
       const initialDirectoryPath = restored?.directoryPath;
       const initialSelectedPath = restored?.selectedFilePath;
