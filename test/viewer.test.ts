@@ -79,6 +79,7 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(80)[0]).toContain("[1/2]");
 
     viewer.handleInput("?");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("j/k/↑/↓: move");
     expect(viewer.render(100).slice(-2).join("\n")).toContain("PgUp/PgDn/Ctrl-U/Ctrl-D: page");
     expect(viewer.render(100).slice(-2).join("\n")).toContain("?: hide");
     expect(viewer.render(100).slice(-2).join("\n")).toContain("q/Esc/←: back");

@@ -603,7 +603,7 @@ export function createViewer(
       helpLines = ["Preview — select a file in the browser"];
     } else if (state.showFullHelp) {
       helpLines = [
-        "PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  /: search  n/N: match",
+        "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  /: search  n/N: match",
         "v: select  d: diff  m: raw/render  []: prev/next change  +/-: height  ?: hide  q/Esc/←: back",
       ];
     } else {

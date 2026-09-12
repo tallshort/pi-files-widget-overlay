@@ -1301,8 +1301,8 @@ export function createFileBrowser(
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
       : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  ?: help  q: close") + changedIndicator;
     const fullHelp = [
-      theme.fg("dim", "h/l←→: folder  PgUp/PgDn: page  c: changed only  C: expand changed"),
-      theme.fg("dim", "[]: change  /: name  @: content  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
+      theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
+      theme.fg("dim", "C: expand  []: change  /:@ search  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height") + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));

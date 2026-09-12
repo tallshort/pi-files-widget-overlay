@@ -367,11 +367,13 @@ describe("file browser expanded changed view", () => {
     expect(wide.at(-1)).not.toContain("│");
     browser.handleInput("?");
     const fullHelp = browser.render(100).slice(-2).join("\n");
+    expect(fullHelp).toContain("j/k/↑/↓: move");
+    expect(fullHelp).toContain("Enter: open");
     expect(fullHelp).toContain("h/l←→: folder");
     expect(fullHelp).toContain("c: changed only");
     expect(fullHelp).toContain("?: hide");
     expect(fullHelp).toContain("q/Esc: close");
-    const narrowHelp = browser.render(24).filter(line => line.includes("h/l") || line.includes("[]:"));
+    const narrowHelp = browser.render(24).slice(-2);
     expect(narrowHelp).toHaveLength(2);
     expect(narrowHelp.every(line => visibleWidth(line) <= 24)).toBe(true);
     browser.handleInput("?");
