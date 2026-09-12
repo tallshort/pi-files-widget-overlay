@@ -4,15 +4,19 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.0] - 2026-09-12
+
 ### Added
 - Let `p` temporarily toggle the wide-terminal browser tree/preview split.
 - Let `?` toggle complete Browser and Viewer keybinding help.
 - Let `@` filter browser files by literal content asynchronously.
 - Restore the last `/readfiles` browse position within a Pi session.
+- Copy selected Browser file or directory paths and current Viewer file paths with `y`.
 
 ### Fixed
 - Keep expanded keybinding help within the overlay height when resizing Browser or Viewer panels.
 - Replace unknown binary and terminal-control-character file content with safe metadata placeholders.
+- Safely discard stale path-copy hints and sanitize unknown overlay errors.
 
 ### Changed
 - Resolve Git-backed re-root metadata in the background and discard stale root results.
