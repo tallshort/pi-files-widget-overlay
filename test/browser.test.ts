@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
@@ -171,6 +171,69 @@ describe("file browser expanded changed view", () => {
       directoryPath: root,
       selectedFilePath: selectedFile,
     });
+  });
+  it("preserves a provisional selection, expansions, and open viewer when Git publishes its tree", async () => {
+    vi.resetModules();
+    vi.doMock("../src/git.ts", async importOriginal => {
+      const actual = await importOriginal<typeof import("../src/git.ts")>();
+      return {
+        ...actual,
+        getGitFileListAsync: async (cwd: string) => {
+          const result = await actual.getGitFileListAsync(cwd);
+          await new Promise(resolve => setTimeout(resolve, 100));
+          return result;
+        },
+      };
+    });
+    try {
+      const { createFileBrowser: createDelayedGitBrowser } = await import("../src/browser.ts");
+      const root = await createChangedRepository();
+      const selectedFile = join(root, "src", "nested", "changed.ts");
+      const browser = createDelayedGitBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile);
+
+      await waitFor(() => browser.getBrowsePosition().selectedFilePath === selectedFile);
+      browser.handleInput("\r");
+      await waitFor(() => browser.render(100).join("\n").includes("export const value = 2"));
+      await waitForBackgroundWork();
+
+      expect(browser.getBrowsePosition().selectedFilePath).toBe(selectedFile);
+      expect(browser.render(100).join("\n")).toContain("export const value = 2");
+    } finally {
+      vi.doUnmock("../src/git.ts");
+      vi.resetModules();
+    }
+  });
+  it("keeps the provisional tree and applies status when tracked Git listing fails", async () => {
+    vi.resetModules();
+    vi.doMock("../src/git.ts", async importOriginal => {
+      const actual = await importOriginal<typeof import("../src/git.ts")>();
+      return {
+        ...actual,
+        getGitFileListAsync: async () => ({ files: [], failed: true, trackedFailed: true }),
+      };
+    });
+    try {
+      const { createFileBrowser: createFailedListBrowser } = await import("../src/browser.ts");
+      const root = await createChangedRepository();
+      const browser = createFailedListBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+      await waitFor(() => {
+        const rendered = browser.render(100).join("\n");
+        return rendered.includes("unchanged.ts") && rendered.includes("changed.ts");
+      });
+      await waitForBackgroundWork();
+      browser.handleInput("C");
+      await waitFor(() => {
+        const rendered = browser.render(100).join("\n");
+        return rendered.includes("changed.ts") && rendered.includes(" M");
+      });
+      const rendered = browser.render(100).join("\n");
+      expect(rendered).toContain("changed.ts");
+      expect(rendered).toContain(" M");
+    } finally {
+      vi.doUnmock("../src/git.ts");
+      vi.resetModules();
+    }
   });
 
   it("restores a nested position without changing the dot root", async () => {
@@ -342,6 +405,22 @@ describe("file browser expanded changed view", () => {
     expect(getGitFileList(subdirectory)).toContain("nested/changed.ts");
     expect(getGitStatus(subdirectory).get("nested/changed.ts")).toBe("M");
     expect(getGitDiffStats(subdirectory).get("nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
+  });
+
+  it("scans only the restored nested path after entering safe mode", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-safe-"));
+    directories.push(root);
+    const directory = join(root, "restored", "nested");
+    const selectedFile = join(directory, "selected.ts");
+    await mkdir(directory, { recursive: true });
+    await writeFile(selectedFile, "export const selected = true;\n");
+    await Promise.all(Array.from({ length: 200 }, (_, index) => writeFile(join(root, `entry-${index}.ts`), "\n")));
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile, directory);
+
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === selectedFile);
+
+    expect(browser.render(100).join("\n")).toContain("selected.ts");
+    expect(browser.getActivityLabel()).toContain("restored");
   });
 
   it("discards scans queued for a previous root", async () => {
