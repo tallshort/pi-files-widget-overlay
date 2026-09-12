@@ -665,8 +665,7 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("f");
       await vi.advanceTimersByTimeAsync(150);
       searches[0]!.reject("failed\u001b[31m");
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       browser.handleInput("\r");
       expect(browser.render(70).join("\n")).toContain("Content search: failed�[31m");
 
@@ -674,8 +673,7 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("s");
       await vi.advanceTimersByTimeAsync(150);
       searches[1]!.resolve("changed.ts:1: value");
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       browser.handleInput("\r");
       expect(browser.render(70).join("\n")).not.toContain("Content search:");
 
@@ -684,7 +682,7 @@ describe("file browser expanded changed view", () => {
       await vi.advanceTimersByTimeAsync(150);
       searches[2]!.reject(new Error("cancelled"));
       await Promise.resolve();
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       browser.handleInput("\u001b");
       expect(browser.render(70).join("\n")).not.toContain("Content search:");
     } finally {
@@ -733,8 +731,7 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("x");
       await vi.advanceTimersByTimeAsync(150);
       rejectSearch!(new Error("grep failed"));
-      await Promise.resolve();
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       browser.handleInput("\r");
       const withBothErrors = browser.render(70).join("\n");
       expect(withBothErrors).toContain("Unable to scan blocked");
@@ -793,10 +790,10 @@ describe("file browser expanded changed view", () => {
       await vi.advanceTimersByTimeAsync(150);
       expect(searches).toHaveLength(2);
       searches[0]!.resolve("old.ts:1: old");
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       expect(browser.render(60).join("\n")).not.toContain("old.ts");
       searches[1]!.resolve("fresh.ts:1: fresh");
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       expect(browser.render(60).join("\n")).toContain("fresh.ts");
 
       browser.handleInput("d");
@@ -805,7 +802,7 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("\r");
       browser.handleInput("u");
       searches[2]!.reject(new Error("stale\u001b[31m failure"));
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       expect(browser.getRootPath()).toBe(parent);
       expect(browser.render(60).join("\n")).not.toContain("old.ts");
 
@@ -817,7 +814,7 @@ describe("file browser expanded changed view", () => {
       closed.handleInput("\r");
       closed.handleInput("q");
       pending.resolve("old.ts:1: old");
-      await Promise.resolve();
+      await vi.runAllTimersAsync();
       expect(closed.render(60).join("\n")).not.toContain("old.ts");
     } finally {
       vi.useRealTimers();
