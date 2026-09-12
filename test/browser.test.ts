@@ -598,6 +598,120 @@ describe("file browser expanded changed view", () => {
     expect(rendered).toContain("deep");
     expect(rendered).toContain("changed.ts");
   });
+  it("isolates @ search failures and clears them after success or cancellation", async () => {
+    vi.resetModules();
+    const searches: Array<{ resolve: (output: string) => void; reject: (error: Error) => void }> = [];
+    vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
+      const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
+      return {
+        ...actual,
+        createGrepTool: () => ({
+          execute: () => new Promise((resolve, reject) => {
+            searches.push({
+              resolve: output => resolve({ content: [{ type: "text", text: output }] }),
+              reject: error => reject(error),
+            });
+          }),
+        }),
+      };
+    });
+    try {
+      const { createFileBrowser: createSearchBrowser } = await import("../src/browser.ts");
+      const root = await createChangedRepository();
+      const browser = createSearchBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+      await waitFor(() => browser.render(80).join("\n").includes("changed.ts"));
+
+      vi.useFakeTimers();
+      browser.handleInput("@");
+      browser.handleInput("f");
+      await vi.advanceTimersByTimeAsync(150);
+      searches[0]!.reject(new Error("failed"));
+      await Promise.resolve();
+      await Promise.resolve();
+      browser.handleInput("\r");
+      expect(browser.render(70).join("\n")).toContain("Content search: failed");
+
+      browser.handleInput("@");
+      browser.handleInput("s");
+      await vi.advanceTimersByTimeAsync(150);
+      searches[1]!.resolve("changed.ts:1: value");
+      await Promise.resolve();
+      await Promise.resolve();
+      browser.handleInput("\r");
+      expect(browser.render(70).join("\n")).not.toContain("Content search:");
+
+      browser.handleInput("@");
+      browser.handleInput("c");
+      await vi.advanceTimersByTimeAsync(150);
+      searches[2]!.reject(new Error("cancelled"));
+      await Promise.resolve();
+      await Promise.resolve();
+      browser.handleInput("\u001b");
+      expect(browser.render(70).join("\n")).not.toContain("Content search:");
+    } finally {
+      vi.useRealTimers();
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
+  });
+
+  it("preserves scan errors beside @ failures and clears only the search error on re-root", async () => {
+    vi.resetModules();
+    let rejectSearch: ((error: Error) => void) | undefined;
+    vi.doMock("node:fs/promises", async importOriginal => {
+      const actual = await importOriginal<typeof import("node:fs/promises")>();
+      return {
+        ...actual,
+        readdir: async (path: string, options: { withFileTypes: true }) => {
+          if (String(path).endsWith("/blocked")) throw new Error("unavailable");
+          return actual.readdir(path, options);
+        },
+      };
+    });
+    vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
+      const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
+      return {
+        ...actual,
+        createGrepTool: () => ({
+          execute: () => new Promise((_resolve, reject) => { rejectSearch = reject; }),
+        }),
+      };
+    });
+    try {
+      const { createFileBrowser: createErrorBrowser } = await import("../src/browser.ts");
+      const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-errors-"));
+      directories.push(parent);
+      const root = join(parent, "root");
+      await mkdir(join(root, "blocked"), { recursive: true });
+      const browser = createErrorBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+      await waitFor(() => browser.render(100).join("\n").includes("blocked"));
+      browser.handleInput("j");
+      browser.handleInput("\r");
+      await waitFor(() => browser.render(100).join("\n").includes("Unable to scan blocked"));
+
+      vi.useFakeTimers();
+      browser.handleInput("@");
+      browser.handleInput("x");
+      await vi.advanceTimersByTimeAsync(150);
+      rejectSearch!(new Error("grep failed"));
+      await Promise.resolve();
+      await Promise.resolve();
+      browser.handleInput("\r");
+      const withBothErrors = browser.render(70).join("\n");
+      expect(withBothErrors).toContain("Unable to scan blocked");
+      expect(withBothErrors).toContain("Content search: grep failed");
+
+      browser.handleInput("u");
+      expect(browser.getRootPath()).toBe(parent);
+      expect(browser.render(70).join("\n")).not.toContain("Content search:");
+    } finally {
+      vi.useRealTimers();
+      vi.doUnmock("node:fs/promises");
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
+  });
+
   it("discards stale @ content searches after query, root, and overlay changes", async () => {
     vi.resetModules();
     const searches: Array<{ root: string; pattern: string; resolve: (output: string) => void; reject: (error: Error) => void }> = [];

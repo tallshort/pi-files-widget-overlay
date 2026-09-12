@@ -72,6 +72,7 @@ interface BrowserState {
   expandedForChangedView: Set<string>;
   focusFirstChildOf: string | null;
   errorMessage: string | null;
+  contentSearchError: string | null;
   browserHeight: number;
   lastPollTime: number;
 }
@@ -334,6 +335,7 @@ export function createFileBrowser(
     expandedForChangedView: new Set<string>(),
     focusFirstChildOf: null,
     errorMessage: null,
+    contentSearchError: null,
     browserHeight: getResponsivePanelHeight(DEFAULT_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9),
     lastPollTime: Date.now(),
   };
@@ -369,6 +371,7 @@ export function createFileBrowser(
     contentSearchAbort = null;
     contentSearchGeneration += 1;
     browser.contentMatches.clear();
+    browser.contentSearchError = null;
   }
   function scheduleContentSearch(): void {
     clearContentSearch();
@@ -401,11 +404,12 @@ export function createFileBrowser(
           if (match) matches.add(resolve(root, match[1]));
         }
         browser.contentMatches = matches;
+        browser.contentSearchError = null;
         browser.selectedIndex = Math.min(browser.selectedIndex, Math.max(0, getDisplayList().length - 1));
       })
       .catch(error => {
         if (generation === contentSearchGeneration && root === rootPath && !controller.signal.aborted) {
-          browser.errorMessage = `Content search: ${sanitizeTerminalLabel(error.message)}`;
+          browser.contentSearchError = `Content search: ${sanitizeTerminalLabel(error.message)}`;
         }
       })
       .finally(() => {
@@ -997,7 +1001,9 @@ export function createFileBrowser(
         if (gitRefreshGeneration === generation) gitRefreshGeneration = null;
       });
   }
+
   function loadRoot(newRoot: string): void {
+    clearContentSearch();
     rootGeneration += 1;
     treeGeneration += 1;
     rootPath = resolve(newRoot);
@@ -1231,7 +1237,7 @@ export function createFileBrowser(
     if (stats.deletions > 0) statsDisplay += theme.fg("error", ` -${stats.deletions}`);
 
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
-    const errors = [browser.errorMessage, ...gitErrors].filter((message): message is string => Boolean(message));
+    const errors = [browser.errorMessage, browser.contentSearchError, ...gitErrors].filter((message): message is string => Boolean(message));
     const errorIndicator = errors.length > 0 ? theme.fg("error", ` [${errors.join("; ")}]`) : "";
     const searchIndicator = browser.searchMode
       ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${sanitizeTerminalLabel(browser.searchQuery)}${CURSOR_MARKER}█`)
@@ -1382,6 +1388,7 @@ export function createFileBrowser(
           if (browser.searchKind === "content") scheduleContentSearch();
         } else {
           browser.searchMode = false;
+          clearContentSearch();
           textInput.reset();
         }
       } else if (matchesKey(data, Key.down)) {
