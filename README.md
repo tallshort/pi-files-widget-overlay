@@ -4,7 +4,9 @@ This is an overlay-focused fork of [tmustier/pi-extensions — files-widget](htt
 In-terminal floating-overlay file browser and diff viewer for Pi. Navigate files, view diffs, select code, and send comments to the agent without leaving the terminal and without interrupting your agent.
 
 
-![File browser overlay](demo.png)
+![Browser with preview](demo.png)
+
+![Selected lines and comment editor](demo2.png)
 ## Install
 
 **Quick install (Pi package manager):**
@@ -50,7 +52,7 @@ npm run typecheck
 - `/readfiles` - open the file browser as a floating overlay in the current directory
 - `/readfiles <path>` - open the floating browser rooted at `<path>` (absolute, relative, or `~`-prefixed)
 
-The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header separates the browser from the agent transcript; `q` or `Esc` closes it and returns focus to Pi.
+The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header shows the current browser root and scan activity, separates the browser from the agent transcript, and keeps `q` or `Esc` available to close it and return focus to Pi.
 Diff viewing is built into the file viewer: open a changed tracked file and press `d` to toggle the git diff view.
 
 On wide terminals, the browser shows a read-only 3:7 tree/preview split. The preview follows the selected item; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control the preview without enabling edits. Its page keys scroll the preview content by half a page.
