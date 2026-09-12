@@ -140,6 +140,17 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(100).join("\n")).not.toContain(CURSOR_MARKER);
   });
 
+  it("closes the browser on q or Escape", async () => {
+    const root = await createChangedRepository();
+    let closes = 0;
+    const createBrowser = () => createFileBrowser(root, new Set(), theme, () => { closes += 1; }, () => {}, () => {});
+
+    createBrowser().handleInput("q");
+    createBrowser().handleInput("\u001b");
+
+    expect(closes).toBe(2);
+  });
+
   it("shows the active browser search query", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
