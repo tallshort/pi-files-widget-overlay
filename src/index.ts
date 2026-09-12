@@ -66,6 +66,18 @@ export function resolveRestoredPosition(defaultPath: string, position: BrowsePos
   }
   return { rootPath: position.rootPath, directoryPath: position.directoryPath };
 }
+function truncatePathTail(path: string, width: number): string {
+  if (width <= 0) return "";
+  if (visibleWidth(path) <= width) return path;
+  if (width === 1) return "…";
+  let suffix = "";
+  for (const character of [...path].reverse()) {
+    if (visibleWidth(`…${character}${suffix}`) > width) break;
+    suffix = character + suffix;
+  }
+  return `…${suffix}`;
+}
+
 
 
 export default function editorExtension(pi: ExtensionAPI): void {
@@ -144,13 +156,16 @@ export default function editorExtension(pi: ExtensionAPI): void {
           };
           const border = (character: string) => theme.fg("border", character);
           const activity = browser.getActivityLabel();
-          const header = padLine(
-            theme.fg("accent", theme.bold(" Files ")) +
-              theme.fg("dim", "— ") +
-              theme.fg("text", browser.getRootPath()) +
-              (activity ? theme.fg("dim", ` ${activity}`) : "") +
-              " "
-          );
+          const restoredPath = browser.getRestorePath();
+          const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ");
+          const availableWidth = Math.max(0, innerWidth - visibleWidth(prefix) - 1);
+          const rootWidth = restoredPath ? Math.floor(availableWidth / 2) : availableWidth;
+          const root = truncatePathTail(browser.getRootPath(), rootWidth);
+          const restoredPrefix = " ↳ restored: ";
+          const restored = restoredPath
+            ? theme.fg("dim", `${restoredPrefix}${truncatePathTail(restoredPath, Math.max(0, availableWidth - visibleWidth(root) - visibleWidth(restoredPrefix)))}`)
+            : "";
+          const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + " ");
 
           return [
             border(`┌${"─".repeat(innerWidth)}┐`),

@@ -33,6 +33,7 @@ const CONTENT_SEARCH_DEBOUNCE_MS = 150;
 export interface BrowserController {
   getRootPath(): string;
   getActivityLabel(): string;
+  getRestorePath(): string | null;
   render(width: number): string[];
   handleInput(data: string): void;
   getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null };
@@ -412,7 +413,6 @@ export function createFileBrowser(
   function activityLabels(): string[] {
     const labels: string[] = [];
     if (browser.scanState.isScanning) labels.push("… scanning");
-    if (restoreNotice) labels.push(`↳ restored: ${restoreNotice}`);
     return labels;
   }
 
@@ -1497,6 +1497,10 @@ export function createFileBrowser(
         directoryPath: selected?.isDirectory ? selected.path : selectedFilePath ? dirname(selectedFilePath) : rootPath,
         selectedFilePath,
       };
+    },
+
+    getRestorePath(): string | null {
+      return restoreNotice;
     },
 
     getActivityLabel(): string {

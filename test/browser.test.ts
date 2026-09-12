@@ -245,10 +245,10 @@ describe("file browser expanded changed view", () => {
     await waitForBackgroundWork();
 
     expect(browser.getBrowsePosition()).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile });
-    expect(browser.getActivityLabel()).toContain("↳ restored: src/nested");
+    expect(browser.getRestorePath()).toBe("src/nested");
     browser.handleInput(".");
     expect(browser.getBrowsePosition().rootPath).toBe(root);
-    expect(browser.getActivityLabel()).not.toContain("restored");
+    expect(browser.getRestorePath()).toBeNull();
   });
   it("falls back safely when a recorded browse position becomes invalid", async () => {
     const root = await createChangedRepository();
@@ -420,7 +420,7 @@ describe("file browser expanded changed view", () => {
     await waitFor(() => browser.getBrowsePosition().selectedFilePath === selectedFile);
 
     expect(browser.render(100).join("\n")).toContain("selected.ts");
-    expect(browser.getActivityLabel()).toContain("restored");
+    expect(browser.getRestorePath()).toContain("restored");
   });
 
   it("discards scans queued for a previous root", async () => {
