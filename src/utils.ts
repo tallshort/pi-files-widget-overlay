@@ -1,6 +1,12 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
+const TERMINAL_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
+
+/** Replace bytes that could alter terminal output while retaining a recognizable label. */
+export function sanitizeTerminalLabel(label: string): string {
+  return label.replace(TERMINAL_CONTROL_CHARACTERS, "�");
+}
 export interface CommandLookupOptions {
   platform?: NodeJS.Platform;
   path?: string;

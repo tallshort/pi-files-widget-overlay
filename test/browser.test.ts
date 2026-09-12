@@ -251,6 +251,22 @@ describe("file browser expanded changed view", () => {
     expect(sanitizeRestorePathLabel("safe\u001b[31mname")).toBe("safe�[31mname");
     expect(getOverlayPathWidths(40, 10, "… scanning", true)).toEqual({ availableWidth: 18, rootWidth: 9 });
   });
+  it("sanitizes control characters in filesystem labels without changing the opened path", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    const unsafeName = "unsafe\u001b[31m\nname.ts";
+    await writeFile(join(root, unsafeName), "export const safe = true;\n");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    await waitFor(() => browser.render(60).join("\n").includes("unsafe�[31m�name.ts"));
+    const rendered = browser.render(60);
+    const label = rendered.find(line => line.includes("unsafe")) ?? "";
+    expect(label).not.toContain("\u001b");
+    expect(label).not.toContain("\n");
+
+    browser.handleInput("\r");
+    expect(browser.render(60).join("\n")).toContain("export const safe = true;");
+  });
 
   it("keeps the provisional tree and applies status when tracked Git listing fails", async () => {
     vi.resetModules();
@@ -553,6 +569,76 @@ describe("file browser expanded changed view", () => {
     expect(rendered).toContain("deep");
     expect(rendered).toContain("changed.ts");
   });
+  it("discards stale @ content searches after query, root, and overlay changes", async () => {
+    vi.resetModules();
+    const searches: Array<{ root: string; pattern: string; resolve: (output: string) => void }> = [];
+    vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
+      const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
+      return {
+        ...actual,
+        createGrepTool: (root: string) => ({
+          execute: (_id: string, input: { pattern: string }) => new Promise(resolve => {
+            searches.push({ root, pattern: input.pattern, resolve: output => resolve({ content: [{ type: "text", text: output }] }) });
+          }),
+        }),
+      };
+    });
+    try {
+      const { createFileBrowser: createSearchBrowser } = await import("../src/browser.ts");
+      const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-search-"));
+      directories.push(parent);
+      const oldRoot = join(parent, "old");
+      await mkdir(oldRoot);
+      await Promise.all([
+        writeFile(join(oldRoot, "old.ts"), "old\n"),
+        writeFile(join(oldRoot, "fresh.ts"), "fresh\n"),
+        writeFile(join(parent, "parent.ts"), "parent\n"),
+      ]);
+      const browser = createSearchBrowser(oldRoot, new Set(), theme, () => {}, () => {}, () => {});
+      await waitFor(() => browser.render(60).join("\n").includes("fresh.ts"));
+
+      vi.useFakeTimers();
+      browser.handleInput("@");
+      browser.handleInput("o");
+      await vi.advanceTimersByTimeAsync(150);
+      expect(searches).toHaveLength(1);
+      browser.handleInput("l");
+      await vi.advanceTimersByTimeAsync(150);
+      expect(searches).toHaveLength(2);
+      searches[0]!.resolve("old.ts:1: old");
+      await Promise.resolve();
+      expect(browser.render(60).join("\n")).not.toContain("old.ts");
+      searches[1]!.resolve("fresh.ts:1: fresh");
+      await Promise.resolve();
+      expect(browser.render(60).join("\n")).toContain("fresh.ts");
+
+      browser.handleInput("d");
+      await vi.advanceTimersByTimeAsync(150);
+      expect(searches).toHaveLength(3);
+      browser.handleInput("\r");
+      browser.handleInput("u");
+      searches[2]!.resolve("old.ts:1: old");
+      await Promise.resolve();
+      expect(browser.getRootPath()).toBe(parent);
+      expect(browser.render(60).join("\n")).not.toContain("old.ts");
+
+      const closed = createSearchBrowser(oldRoot, new Set(), theme, () => {}, () => {}, () => {});
+      closed.handleInput("@");
+      closed.handleInput("o");
+      await vi.advanceTimersByTimeAsync(150);
+      const pending = searches.at(-1)!;
+      closed.handleInput("\r");
+      closed.handleInput("q");
+      pending.resolve("old.ts:1: old");
+      await Promise.resolve();
+      expect(closed.render(60).join("\n")).not.toContain("old.ts");
+    } finally {
+      vi.useRealTimers();
+      vi.doUnmock("@earendil-works/pi-coding-agent");
+      vi.resetModules();
+    }
+  });
+
   it("filters files by content with @", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

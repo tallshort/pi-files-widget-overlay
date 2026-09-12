@@ -13,7 +13,7 @@ import {
 } from "./constants";
 import { loadFileContent, type RenderedLines } from "./file-viewer";
 import type { FileNode } from "./types";
-import { isImagePath, isMarkdownPath, isUntrackedStatus } from "./utils";
+import { isImagePath, isMarkdownPath, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createTextInputBuffer } from "./input-utils";
 
 const COMMENT_EDITOR_MAX_VISIBLE_LINES = 4;
@@ -223,7 +223,7 @@ export function createViewer(
         state.lastLoadedMtimeMs = fileStat.mtimeMs;
         return;
       }
-      state.rawContent = readFileSync(state.file.path, "utf-8");
+      state.rawContent = readFileSync(state.file.path, "utf-8").replace(/\r\n/g, "\n");
       state.file.lineCount = state.rawContent.split("\n").length;
       state.lastLoadedMtimeMs = fileStat.mtimeMs;
     } catch {
@@ -502,7 +502,7 @@ export function createViewer(
     if (!state.file) return "";
     const isUntracked = isUntrackedStatus(state.file.gitStatus);
 
-    let header = theme.bold(theme.fg("text", state.file.name));
+    let header = theme.bold(theme.fg("text", sanitizeTerminalLabel(state.file.name)));
     if (isUntracked) {
       header += theme.fg("dim", " [UNTRACKED]");
     } else if (state.diffMode) {

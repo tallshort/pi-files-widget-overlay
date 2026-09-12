@@ -23,7 +23,7 @@ import {
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
 import type { DiffStats, FileNode, FlatNode } from "./types";
-import { isIgnoredStatus, isUntrackedStatus } from "./utils";
+import { isIgnoredStatus, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
 import { createTextInputBuffer } from "./input-utils";
 
@@ -255,14 +255,15 @@ function withSymlinkMarker(label: string, node: FileNode, theme: Theme): string 
 }
 
 function formatNodeName(node: FileNode, theme: Theme): string {
-  if (isIgnoredStatus(node.gitStatus)) return withSymlinkMarker(theme.fg("dim", node.name), node, theme);
+  const name = sanitizeTerminalLabel(node.name);
+  if (isIgnoredStatus(node.gitStatus)) return withSymlinkMarker(theme.fg("dim", name), node, theme);
   if (node.isDirectory) {
-    const label = node.hasChangedChildren ? theme.fg("warning", node.name) : theme.fg("accent", node.name);
+    const label = node.hasChangedChildren ? theme.fg("warning", name) : theme.fg("accent", name);
     const rendered = withSymlinkMarker(label, node, theme);
     return node.loading ? `${rendered}${theme.fg("dim", " ~")}` : rendered;
   }
-  if (node.gitStatus) return withSymlinkMarker(theme.fg("warning", node.name), node, theme);
-  return withSymlinkMarker(theme.fg("text", node.name), node, theme);
+  if (node.gitStatus) return withSymlinkMarker(theme.fg("warning", name), node, theme);
+  return withSymlinkMarker(theme.fg("text", name), node, theme);
 }
 
 function collapseAllExcept(node: FileNode, keep: Set<FileNode>): void {
@@ -1217,7 +1218,7 @@ export function createFileBrowser(
 
   function renderBrowser(width: number): string[] {
     const lines: string[] = [];
-    const branchDisplay = gitBranch ? theme.fg("accent", ` (${gitBranch})`) : "";
+    const branchDisplay = gitBranch ? theme.fg("accent", ` (${sanitizeTerminalLabel(gitBranch)})`) : "";
     const stats = browser.stats;
 
     let statsDisplay = "";
@@ -1231,7 +1232,7 @@ export function createFileBrowser(
     const errors = [browser.errorMessage, ...gitErrors].filter((message): message is string => Boolean(message));
     const errorIndicator = errors.length > 0 ? theme.fg("error", ` [${errors.join("; ")}]`) : "";
     const searchIndicator = browser.searchMode
-      ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${browser.searchQuery}${CURSOR_MARKER}█`)
+      ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${sanitizeTerminalLabel(browser.searchQuery)}${CURSOR_MARKER}█`)
       : "";
 
     const header = browser.searchMode
@@ -1244,7 +1245,7 @@ export function createFileBrowser(
     if (displayList.length === 0) {
       const emptyLabel = browser.scanState.isScanning
         ? "  (loading...)"
-        : "  (no files" + (browser.searchQuery ? ` matching '${browser.searchQuery}'` : "") + ")";
+        : "  (no files" + (browser.searchQuery ? ` matching '${sanitizeTerminalLabel(browser.searchQuery)}'` : "") + ")";
       lines.push(theme.fg("dim", emptyLabel));
       for (let i = 1; i < browser.browserHeight; i++) {
         lines.push("");

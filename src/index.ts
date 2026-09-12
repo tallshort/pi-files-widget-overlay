@@ -14,8 +14,8 @@ import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
 import { getObservedToolActivityPath } from "./activity";
+import { sanitizeTerminalLabel } from "./utils";
 
-const CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 /** Read-only opt-in: malformed, absent, or non-boolean settings stay disabled. */
 export function readRestoreBrowsePositionSetting(settingsPath = join(homedir(), ".pi", "agent", "settings.json")): boolean {
@@ -30,7 +30,7 @@ export function readRestoreBrowsePositionSetting(settingsPath = join(homedir(), 
 }
 
 export function sanitizeRestorePathLabel(path: string): string {
-  return path.replace(CONTROL_CHARACTERS, "�");
+  return sanitizeTerminalLabel(path);
 }
 
 export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
@@ -122,7 +122,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
 
       const resolved = resolveInitialPath(args, cwd);
       if (resolved.error) {
-        ctx.ui.notify(resolved.error, "error");
+        ctx.ui.notify(sanitizeTerminalLabel(resolved.error), "error");
         return;
       }
       const hasExplicitPath = Boolean(args?.trim());
@@ -151,10 +151,10 @@ export default function editorExtension(pi: ExtensionAPI): void {
           const message = formatCommentMessage(payload, comment);
           if (ctx.isIdle()) {
             pi.sendUserMessage(message);
-            ctx.ui.notify(`Comment sent to agent for ${payload.relPath} (${payload.lineRange})`, "info");
+            ctx.ui.notify(`Comment sent to agent for ${sanitizeTerminalLabel(payload.relPath)} (${payload.lineRange})`, "info");
           } else {
             pi.sendUserMessage(message, { deliverAs: "followUp" });
-            ctx.ui.notify(`Comment queued for agent for ${payload.relPath} (${payload.lineRange})`, "info");
+            ctx.ui.notify(`Comment queued for agent for ${sanitizeTerminalLabel(payload.relPath)} (${payload.lineRange})`, "info");
           }
         };
 

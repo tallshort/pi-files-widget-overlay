@@ -360,6 +360,30 @@ describe("file viewer word wrapping", () => {
     ]);
   });
 
+  it("normalizes CRLF selected text and range before sending a comment", async () => {
+    const filePath = await createSourceFile("const first = 1;\r\nconst second = 2;\r\nconst third = 3;\r\n", "crlf-comment.ts");
+    const comments: Array<{ payload: CommentPayload; comment: string }> = [];
+    const viewer = createViewer(
+      { getRoot: () => tmpdir(), projectCwd: tmpdir() },
+      theme,
+      (payload, comment) => comments.push({ payload, comment })
+    );
+    viewer.setFile({ name: "crlf-comment.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+    viewer.handleInput("v");
+    viewer.handleInput("j");
+    viewer.handleInput("c");
+    viewer.handleInput("CRLF note");
+    viewer.handleInput("\u0004");
+
+    expect(comments).toEqual([
+      {
+        payload: expect.objectContaining({ lineRange: "lines 1-2", selectedText: "const first = 1;\nconst second = 2;" }),
+        comment: "CRLF note",
+      },
+    ]);
+  });
+
   it("edits comments at the cursor without activating viewer navigation", async () => {
     const filePath = await createSourceFile();
     const comments: string[] = [];
