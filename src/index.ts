@@ -49,22 +49,22 @@ function isAccessibleDirectory(path: string): boolean {
   }
 }
 
-export function resolveRestoredPosition(defaultPath: string, position: BrowsePosition | null): { path: string; selectedFilePath?: string } {
-  if (!position || !isAccessibleDirectory(position.rootPath)) return { path: defaultPath };
+export function resolveRestoredPosition(defaultPath: string, position: BrowsePosition | null): { rootPath: string; directoryPath: string; selectedFilePath?: string } {
+  if (!position || !isAccessibleDirectory(position.rootPath)) return { rootPath: defaultPath, directoryPath: defaultPath };
   const relativeDirectory = relative(position.rootPath, position.directoryPath);
   if (relativeDirectory === ".." || relativeDirectory.startsWith(`..${sep}`) || !isAccessibleDirectory(position.directoryPath)) {
-    return { path: defaultPath };
+    return { rootPath: defaultPath, directoryPath: defaultPath };
   }
   if (position.selectedFilePath) {
     try {
       if (statSync(position.selectedFilePath).isFile() && dirname(position.selectedFilePath) === position.directoryPath) {
-        return { path: position.directoryPath, selectedFilePath: position.selectedFilePath };
+        return { rootPath: position.rootPath, directoryPath: position.directoryPath, selectedFilePath: position.selectedFilePath };
       }
     } catch {
       // The file was removed between close and reopen; restore its directory.
     }
   }
-  return { path: position.directoryPath };
+  return { rootPath: position.rootPath, directoryPath: position.directoryPath };
 }
 
 
@@ -83,7 +83,8 @@ export default function editorExtension(pi: ExtensionAPI): void {
       }
       const hasExplicitPath = Boolean(args?.trim());
       const restored = hasExplicitPath ? undefined : resolveRestoredPosition(resolved.path, lastBrowsePosition);
-      const initialPath = restored?.path ?? resolved.path;
+      const initialRootPath = restored?.rootPath ?? resolved.path;
+      const initialDirectoryPath = restored?.directoryPath;
       const initialSelectedPath = restored?.selectedFilePath;
       const { createFileBrowser } = await import("./browser");
 
@@ -113,14 +114,15 @@ export default function editorExtension(pi: ExtensionAPI): void {
 
         const requestRender = () => tui.requestRender();
         const browser = createFileBrowser(
-          initialPath,
+          initialRootPath,
           agentModifiedFiles,
           theme,
           cleanup,
           requestComment,
           requestRender,
           cwd,
-          initialSelectedPath
+          initialSelectedPath,
+          initialDirectoryPath
         );
         captureBrowsePosition = () => {
           lastBrowsePosition = browser.getBrowsePosition();

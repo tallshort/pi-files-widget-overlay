@@ -283,7 +283,8 @@ export function createFileBrowser(
   requestComment: (payload: CommentPayload, comment: string) => void,
   requestRender: () => void,
   projectCwd: string = initialPath,
-  initialSelectedPath?: string
+  initialSelectedPath?: string,
+  initialDirectoryPath?: string
 ): BrowserController {
   const ignored = getIgnoredNames();
 
@@ -300,7 +301,8 @@ export function createFileBrowser(
   let lastRenderWidth = 0;
   let previewEnabled = true;
   let showFullHelp = false;
-  let pendingSelectedPath = initialSelectedPath ? resolve(initialSelectedPath) : null;
+  let pendingRestorePath = initialSelectedPath ? resolve(initialSelectedPath) : initialDirectoryPath ? resolve(initialDirectoryPath) : null;
+  let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
   const textInput = createTextInputBuffer();
 
   const scanState: ScanState = {
@@ -406,6 +408,7 @@ export function createFileBrowser(
   function activityLabels(): string[] {
     const labels: string[] = [];
     if (browser.scanState.isScanning) labels.push("… scanning");
+    if (restoreNotice) labels.push(`↳ restored: ${restoreNotice}`);
     return labels;
   }
 
@@ -414,12 +417,16 @@ export function createFileBrowser(
     browser.fullList = browser.root ? flattenTree(browser.root, 0, true, true) : [];
   }
 
-  function restoreSelectedFile(): boolean {
-    if (!pendingSelectedPath) return false;
-    const index = getDisplayList().findIndex(item => item.node.path === pendingSelectedPath && !item.node.isDirectory);
+  function restoreInitialPosition(): boolean {
+    if (!pendingRestorePath) return false;
+    const node = browser.nodeByPath.get(pendingRestorePath);
+    if (!node) return false;
+    for (let ancestor: FileNode | undefined = node; ancestor; ancestor = ancestor.parent) ancestor.expanded = true;
+    refreshLists();
+    const index = getDisplayList().findIndex(item => item.node.path === pendingRestorePath);
     if (index === -1) return false;
     browser.selectedIndex = index;
-    pendingSelectedPath = null;
+    pendingRestorePath = null;
     return true;
   }
   function reportError(message: string): void {
@@ -674,7 +681,7 @@ export function createFileBrowser(
     updateTreeStats(browser.root);
     browser.stats = getTreeStats(browser.root);
     refreshLists();
-    restoreSelectedFile();
+    restoreInitialPosition();
     if (browser.focusFirstChildOf) {
       const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
       if (directory && focusFirstChild(directory)) browser.focusFirstChildOf = null;
@@ -938,7 +945,7 @@ export function createFileBrowser(
       browser.scanState.isPartial = false;
       indexNodes(browser.root, browser.nodeByPath);
       refreshLists();
-      restoreSelectedFile();
+      restoreInitialPosition();
       browser.stats = getTreeStats(browser.root);
       queueLineCountsForDirectory(browser.root);
       requestRender();
@@ -949,7 +956,7 @@ export function createFileBrowser(
     if (viewer.isOpen()) {
       viewer.close();
     }
-    pendingSelectedPath = null;
+    pendingRestorePath = null;
     stopBackgroundTasks();
     scanQueue.length = 0;
     scanQueued.clear();
@@ -1160,7 +1167,7 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  p: preview  ?: help  q: close") + changedIndicator;
+      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  ?: help  q: close") + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "h/l←→: folder  PgUp/PgDn: page  c: changed only  C: expand changed"),
       theme.fg("dim", "[]: change  /: name  @: content  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
@@ -1445,6 +1452,7 @@ export function createFileBrowser(
     },
 
     handleInput(data: string): void {
+      restoreNotice = null;
       if (viewer.isOpen()) {
         handleViewerInput(data);
       } else {

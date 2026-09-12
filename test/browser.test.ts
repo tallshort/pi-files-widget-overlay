@@ -173,6 +173,20 @@ describe("file browser expanded changed view", () => {
     });
   });
 
+  it("restores a nested position without changing the dot root", async () => {
+    const root = await createChangedRepository();
+    const directory = join(root, "src", "nested");
+    const selectedFile = join(directory, "changed.ts");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile, directory);
+
+    await waitForBackgroundWork();
+
+    expect(browser.getBrowsePosition()).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile });
+    expect(browser.getActivityLabel()).toContain("↳ restored: src/nested");
+    browser.handleInput(".");
+    expect(browser.getBrowsePosition().rootPath).toBe(root);
+    expect(browser.getActivityLabel()).not.toContain("restored");
+  });
   it("falls back safely when a recorded browse position becomes invalid", async () => {
     const root = await createChangedRepository();
     const fallback = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-fallback-"));
@@ -183,11 +197,11 @@ describe("file browser expanded changed view", () => {
     await writeFile(selectedFile, "export const selected = true;\n");
     const position = { rootPath: root, directoryPath: directory, selectedFilePath: selectedFile };
 
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: directory, selectedFilePath: selectedFile });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile });
     await rm(selectedFile);
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: directory });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: root, directoryPath: directory });
     await rm(directory, { recursive: true });
-    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: fallback });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ rootPath: fallback, directoryPath: fallback });
   });
 
   it("shows the active browser search query", async () => {
@@ -217,6 +231,7 @@ describe("file browser expanded changed view", () => {
     expect(wide.at(-1)).toContain("c/C: changes");
     expect(wide.at(-1)).toContain("[]: prev/next change");
     expect(wide.at(-1)).toContain("?: help");
+    expect(wide.at(-1)).toContain(".: root");
     expect(wide.at(-1)).not.toContain("│");
     browser.handleInput("?");
     const fullHelp = browser.render(100).slice(-2).join("\n");
