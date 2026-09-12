@@ -52,7 +52,7 @@ npm run typecheck
 - `/readfiles` - open the file browser as a floating overlay in the current directory
 - `/readfiles <path>` - open the floating browser rooted at `<path>` (absolute, relative, or `~`-prefixed)
 
-The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header shows the current browser root and scan activity, separates the browser from the agent transcript, and keeps `q` or `Esc` available to close it and return focus to Pi.
+The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header shows the current browser root and scan activity, and separates the browser from the agent transcript. In browser mode, `q` or `Esc` closes the overlay and returns focus to Pi.
 Diff viewing is built into the file viewer: open a changed tracked file and press `d` to toggle the git diff view.
 
 On wide terminals, the browser shows a read-only 3:7 tree/preview split. The preview follows the selected item; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control the preview without enabling edits. Its page keys scroll the preview content by half a page.

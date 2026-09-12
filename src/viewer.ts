@@ -17,6 +17,7 @@ import { isImagePath, isMarkdownPath, isUntrackedStatus } from "./utils";
 import { createTextInputBuffer } from "./input-utils";
 
 const COMMENT_EDITOR_MAX_VISIBLE_LINES = 4;
+const COMMENT_CURSOR_SENTINEL_START = 0xe000;
 
 export interface CommentPayload {
   relPath: string;
@@ -147,10 +148,25 @@ export function createViewer(
     return Array.from(commentSegmenter.segment(text), ({ segment }) => segment);
   }
 
+  function commentCursorSentinel(text: string): string {
+    for (let codePoint = COMMENT_CURSOR_SENTINEL_START; codePoint <= 0xf8ff; codePoint++) {
+      const sentinel = String.fromCodePoint(codePoint);
+      if (!text.includes(sentinel)) return sentinel;
+    }
+    throw new Error("Comment text exhausts cursor sentinels");
+  }
+
   function resetComment(): void {
     state.commentText = "";
     state.commentCursor = 0;
     state.commentScope = "selection";
+  }
+
+  function openComment(scope: "selection" | "file"): void {
+    state.commentScope = scope;
+    state.mode = "comment";
+    state.commentText = "";
+    state.commentCursor = 0;
   }
 
   function insertCommentText(text: string): void {
@@ -519,7 +535,8 @@ export function createViewer(
     const contentWidth = Math.max(1, width - 3);
     const wrappedLines: string[] = [];
     const graphemes = commentGraphemes(state.commentText);
-    const commentWithCursor = `${graphemes.slice(0, state.commentCursor).join("")}█${graphemes.slice(state.commentCursor).join("")}`;
+    const cursorSentinel = commentCursorSentinel(state.commentText);
+    const commentWithCursor = `${graphemes.slice(0, state.commentCursor).join("")}${cursorSentinel}${graphemes.slice(state.commentCursor).join("")}`;
     const logicalLines = commentWithCursor.split("\n");
 
     for (const line of logicalLines) {
@@ -534,10 +551,10 @@ export function createViewer(
       wrappedLines.push("█");
     }
 
-    const cursorLineIndex = wrappedLines.findIndex(line => line.includes("█"));
+    const cursorLineIndex = wrappedLines.findIndex(line => line.includes(cursorSentinel));
     if (cursorLineIndex >= 0) {
-      const cursorColumn = wrappedLines[cursorLineIndex]!.indexOf("█");
-      wrappedLines[cursorLineIndex] = `${wrappedLines[cursorLineIndex]!.slice(0, cursorColumn)}${CURSOR_MARKER}${wrappedLines[cursorLineIndex]!.slice(cursorColumn)}`;
+      const cursorColumn = wrappedLines[cursorLineIndex]!.indexOf(cursorSentinel);
+      wrappedLines[cursorLineIndex] = `${wrappedLines[cursorLineIndex]!.slice(0, cursorColumn)}${CURSOR_MARKER}█${wrappedLines[cursorLineIndex]!.slice(cursorColumn + cursorSentinel.length)}`;
     }
     const cursorLine = Math.max(0, cursorLineIndex);
     const visibleStart = Math.min(
@@ -882,17 +899,11 @@ export function createViewer(
         return { type: "none" };
       }
       if (matchesKey(data, "shift+c") && state.mode === "select") {
-        state.commentScope = "file";
-        state.mode = "comment";
-        state.commentText = "";
-        state.commentCursor = 0;
+        openComment("file");
         return { type: "none" };
       }
       if (matchesKey(data, "c") && state.mode === "select") {
-        state.commentScope = "selection";
-        state.mode = "comment";
-        state.commentText = "";
-        state.commentCursor = 0;
+        openComment("selection");
         return { type: "none" };
       }
       if (matchesKey(data, "]") && state.mode !== "select") {

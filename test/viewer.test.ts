@@ -129,6 +129,19 @@ describe("file viewer word wrapping", () => {
     expect(comments).toEqual(["123456789"]);
   });
 
+  it("positions the comment cursor after a block character in comment text", async () => {
+    const filePath = await createSourceFile("const value = 1;\n");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "cursor.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("x█y");
+    viewer.handleInput("\u001b[D");
+
+    expect(viewer.render(80).some(line => line.includes(`x█${CURSOR_MARKER}█y`))).toBe(true);
+  });
+
   it("does not highlight a current line in a read-only preview", async () => {
     const filePath = await createSourceFile("const value = 'this preview line is intentionally long enough to wrap';\n");
     const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
