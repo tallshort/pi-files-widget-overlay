@@ -62,6 +62,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `j/k` or `↑/↓`: move
 - `Enter`: open file / expand folder
 - `h/l` or `←/→`: collapse/expand folder
+- `p`: toggle the wide-terminal tree/preview split
 - `PgUp/PgDn`: page the browser tree in the narrow single-column layout
 - `c`: toggle changed-only view
 - `C`: toggle the expanded changed view; enabling it expands every directory containing changes

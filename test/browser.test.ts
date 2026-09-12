@@ -166,6 +166,14 @@ describe("file browser expanded changed view", () => {
     expect(wide.some(line => line.includes("│"))).toBe(true);
     expect(wide.at(-1)).toContain("j/k: nav");
     expect(wide.at(-1)).not.toContain("│");
+
+    browser.handleInput("p");
+    expect(browser.render(100).some(line => line.includes("│"))).toBe(false);
+    browser.handleInput("p");
+    expect(browser.render(100).some(line => line.includes("│"))).toBe(true);
+
+    expect(browser.render(79).some(line => line.includes("│"))).toBe(false);
+    browser.handleInput("p");
     expect(browser.render(79).some(line => line.includes("│"))).toBe(false);
   });
   it("shows hidden project files while keeping .git internal", async () => {

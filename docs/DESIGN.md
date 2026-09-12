@@ -20,7 +20,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes asynchronously while the overlay is open, so existing tree state remains interactive until fresh metadata arrives; results from an earlier root are discarded after re-rooting.
 - A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
-- On wide terminals, the browser uses a 3:7 tree and read-only preview split. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Preview page keys scroll its content by half a page without showing a cursor. Narrow terminals retain the single-column tree.
+- On wide terminals, the browser uses a 3:7 tree and read-only preview split. `p` temporarily toggles that split; it resets when the overlay reopens and is a no-op on narrow terminals. The preview follows the selected item using viewer rendering; `g/G`, `PgUp/PgDn`, `Ctrl-U/Ctrl-D`, and `w` control its position or wrapping without allowing edits, searches, selection, comments, or mode changes. Preview page keys scroll its content by half a page without showing a cursor. Narrow terminals retain the single-column tree.
 
 ### Viewer and comments
 

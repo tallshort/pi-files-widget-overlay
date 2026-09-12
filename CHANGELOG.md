@@ -2,6 +2,10 @@
 
 All notable changes to this extension will be documented in this file.
 
+## [Unreleased]
+
+### Added
+- Let `p` temporarily toggle the wide-terminal browser tree/preview split.
 ## [0.5.0] - 2026-09-11
 
 ### Fixed

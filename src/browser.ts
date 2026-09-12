@@ -292,6 +292,7 @@ export function createFileBrowser(
   const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true }, theme, requestComment);
   let previewPath: string | null = null;
   let lastRenderWidth = 0;
+  let previewEnabled = true;
   const textInput = createTextInputBuffer();
 
   const scanState: ScanState = {
@@ -1055,7 +1056,7 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "j/k: nav  u: up  .: home  c/C: toggle changed / expanded changed  []: next/prev change  /: search  q: close") + changedIndicator;
+      : theme.fg("dim", "j/k: nav  p: preview  u: up  .: home  c/C: toggle changed / expanded changed  []: next/prev change  /: search  q: close") + changedIndicator;
     lines.push(truncateToWidth(help, width));
 
     return lines;
@@ -1139,6 +1140,10 @@ export function createFileBrowser(
           browser.selectedIndex = 0;
         }
       }
+      return;
+    }
+    if (matchesKey(data, "p")) {
+      if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
       return;
     }
     if (matchesKey(data, "u")) {
@@ -1241,7 +1246,7 @@ export function createFileBrowser(
   }
 
   function renderBrowserWithPreview(width: number): string[] {
-    if (width < MIN_PREVIEW_WIDTH) return renderBrowser(width);
+    if (!previewEnabled || width < MIN_PREVIEW_WIDTH) return renderBrowser(width);
 
     const treeWidth = Math.floor((width - 1) * 0.3);
     const previewWidth = width - treeWidth - 1;
