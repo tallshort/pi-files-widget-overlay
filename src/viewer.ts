@@ -82,6 +82,7 @@ export function createViewer(
   const { getRoot, projectCwd, readOnly = false } = config;
   const searchInput = createTextInputBuffer();
   const commentInput = createTextInputBuffer({ preserveNewlines: true });
+  const commentSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
 
   const state: ViewerState = {
     file: null,
@@ -142,6 +143,10 @@ export function createViewer(
     state.searchIndex = 0;
   }
 
+  function commentGraphemes(text: string): string[] {
+    return Array.from(commentSegmenter.segment(text), ({ segment }) => segment);
+  }
+
   function resetComment(): void {
     state.commentText = "";
     state.commentCursor = 0;
@@ -149,13 +154,18 @@ export function createViewer(
   }
 
   function insertCommentText(text: string): void {
-    state.commentText = `${state.commentText.slice(0, state.commentCursor)}${text}${state.commentText.slice(state.commentCursor)}`;
-    state.commentCursor += text.length;
+    const graphemes = commentGraphemes(state.commentText);
+    const inserted = commentGraphemes(text);
+    graphemes.splice(state.commentCursor, 0, ...inserted);
+    state.commentText = graphemes.join("");
+    state.commentCursor += inserted.length;
   }
 
   function deleteCommentBackward(): void {
     if (state.commentCursor === 0) return;
-    state.commentText = `${state.commentText.slice(0, state.commentCursor - 1)}${state.commentText.slice(state.commentCursor)}`;
+    const graphemes = commentGraphemes(state.commentText);
+    graphemes.splice(state.commentCursor - 1, 1);
+    state.commentText = graphemes.join("");
     state.commentCursor--;
   }
 
@@ -508,7 +518,8 @@ export function createViewer(
   function renderCommentEditor(width: number): string[] {
     const contentWidth = Math.max(1, width - 3);
     const wrappedLines: string[] = [];
-    const commentWithCursor = `${state.commentText.slice(0, state.commentCursor)}█${state.commentText.slice(state.commentCursor)}`;
+    const graphemes = commentGraphemes(state.commentText);
+    const commentWithCursor = `${graphemes.slice(0, state.commentCursor).join("")}█${graphemes.slice(state.commentCursor).join("")}`;
     const logicalLines = commentWithCursor.split("\n");
 
     for (const line of logicalLines) {
@@ -692,7 +703,7 @@ export function createViewer(
         } else if (matchesKey(data, Key.left)) {
           state.commentCursor = Math.max(0, state.commentCursor - 1);
         } else if (matchesKey(data, Key.right)) {
-          state.commentCursor = Math.min(state.commentText.length, state.commentCursor + 1);
+          state.commentCursor = Math.min(commentGraphemes(state.commentText).length, state.commentCursor + 1);
         } else if (matchesKey(data, Key.backspace)) {
           deleteCommentBackward();
         } else {

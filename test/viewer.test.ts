@@ -247,6 +247,24 @@ describe("file viewer word wrapping", () => {
     expect(comments).toEqual(["abc"]);
   });
 
+  it("keeps Unicode graphemes intact while moving the comment cursor", async () => {
+    const filePath = await createSourceFile();
+    const comments: string[] = [];
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    viewer.setFile({ name: "comment.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("a😀c");
+    viewer.handleInput("\u001b[D");
+    viewer.handleInput("\u001b[D");
+    viewer.handleInput("b");
+    viewer.handleInput("\u001b[13;3u");
+
+    expect(comments).toEqual(["ab😀c"]);
+  });
+
   it("sends a file-level comment from selection mode", async () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];

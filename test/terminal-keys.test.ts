@@ -15,6 +15,7 @@ describe("terminal key sequences", () => {
     ["Ctrl-U", "\u0015", "ctrl+u"],
     ["Ctrl-D", "\u0004", "ctrl+d"],
     ["Ctrl-Enter", "\u001b[13;5u", "ctrl+enter"],
+    ["Alt-Enter", "\u001b[13;3u", "alt+enter"],
   ])("recognizes $s", (_name, sequence, key) => {
     expect(matchesKey(sequence, key as Parameters<typeof matchesKey>[1])).toBe(true);
   });
