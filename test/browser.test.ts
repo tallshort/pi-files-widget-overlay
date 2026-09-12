@@ -64,7 +64,7 @@ describe("file browser expanded changed view", () => {
   it("toggles the expanded changed view with C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     browser.handleInput("C");
     const rendered = browser.render(100).join("\n");
 
@@ -78,7 +78,7 @@ describe("file browser expanded changed view", () => {
   it("keeps top-level directories with only deep tracked paths", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     expect(browser.render(100).join("\n")).toContain("deep");
   });
 
@@ -94,7 +94,7 @@ describe("file browser expanded changed view", () => {
       bold: (text: string) => text,
     } as unknown as Theme;
     const browser = createFileBrowser(root, new Set(), visualTheme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     const selected = browser.render(60).find(line => line.includes("<selectedBg>")) ?? "";
     expect(selected.replace(/<\/?selectedBg>/g, "")).toHaveLength(60);
     expect(colors).toContain("text");
@@ -103,14 +103,14 @@ describe("file browser expanded changed view", () => {
   it("keeps Git status visible when a narrow browser truncates names", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     browser.handleInput("C");
     expect(browser.render(12).join("\n")).toContain(" M");
   });
   it("uses stable labels for background activity", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     const rendered = browser.render(100).join("\n");
     expect(browser.getActivityLabel()).toBe("");
     expect(rendered).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
@@ -119,7 +119,7 @@ describe("file browser expanded changed view", () => {
   it("marks files modified by the current agent session with a robot", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set([join(root, "unchanged.ts")]), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     expect(browser.render(100).join("\n")).toContain("🤖");
   });
 
@@ -171,7 +171,7 @@ describe("file browser expanded changed view", () => {
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     const wide = browser.render(100);
     expect(wide.join("\n")).toContain("Directory selected - expand it in the file tree instead of opening it.");
     expect(wide.some(line => line.includes("│"))).toBe(true);
@@ -216,6 +216,7 @@ describe("file browser expanded changed view", () => {
   it("shows hidden project files while keeping .git internal", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
     const rendered = browser.render(100).join("\n");
 
     expect(rendered).toContain(".pi");
@@ -305,7 +306,7 @@ describe("file browser expanded changed view", () => {
   it("enters first children with right input and collapses parents with left input", async () => {
     const root = await createNestedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     browser.handleInput("l");
     browser.handleInput("l");
     browser.handleInput("h");
@@ -315,10 +316,25 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(100).join("\n")).not.toContain("nested");
   });
 
+  it("keeps only the latest asynchronous Git re-root result", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(join(root, "src", "nested"), new Set(), theme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
+
+    browser.handleInput("u");
+    browser.handleInput("u");
+    expect(browser.render(100).join("\n")).toContain("(loading...)");
+    await waitForBackgroundWork();
+
+    const rendered = browser.render(100).join("\n");
+    expect(browser.getRootPath()).toBe(root);
+    expect(rendered).toContain("deep");
+    expect(rendered).toContain("changed.ts");
+  });
   it("shares changed-only state between c and C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-
+    await waitForBackgroundWork();
     browser.handleInput("c");
     expect(browser.render(100).join("\n")).not.toContain("unchanged.ts");
 

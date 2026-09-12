@@ -25,6 +25,15 @@ export function isGitRepo(cwd: string): boolean {
   }
 }
 
+export async function isGitRepoAsync(cwd: string): Promise<boolean> {
+  try {
+    await runGit(cwd, ["rev-parse", "--is-inside-work-tree"], 2000);
+    return true;
+  } catch {
+    return false;
+  }
+}
+
 /**
  * Path of `cwd` relative to the repository top-level (e.g. "app/"), or "" when
  * at the top level. Git status reports paths relative to the repository root,
@@ -129,6 +138,20 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
   }
 
   return Array.from(files);
+}
+
+export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean }> {
+  try {
+    const [trackedOutput, statusResult] = await Promise.all([
+      runGit(cwd, ["ls-files", "-z"], 5000),
+      getGitStatusAsync(cwd, { includeIgnored: false }),
+    ]);
+    const files = new Set(trackedOutput.split("\0").filter(Boolean));
+    for (const filePath of statusResult.status.keys()) files.add(filePath);
+    return { files: Array.from(files), failed: statusResult.failed };
+  } catch {
+    return { files: [], failed: true };
+  }
 }
 
 export function getGitBranch(cwd: string): string {

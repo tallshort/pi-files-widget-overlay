@@ -20,7 +20,7 @@ import {
   SCAN_BATCH_SIZE,
   SAFE_MODE_ENTRY_THRESHOLD,
 } from "./constants";
-import { getGitBranch, getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitStatus, getGitStatusAsync, isGitRepo } from "./git";
+import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
 import type { DiffStats, FileNode, FlatNode } from "./types";
 import { isIgnoredStatus, isUntrackedStatus } from "./utils";
@@ -799,35 +799,28 @@ export function createFileBrowser(
     rootPath = resolve(newRoot);
     browser.errorMessage = null;
 
-    repo = isGitRepo(rootPath);
-    gitStatus = repo ? getGitStatus(rootPath, {}, reportGitError) : new Map<string, string>();
-    diffStats = repo ? getGitDiffStats(rootPath, reportGitError) : new Map<string, DiffStats>();
-    gitBranch = repo ? getGitBranch(rootPath) : "";
+    const generation = rootGeneration;
+    repo = false;
+    gitStatus = new Map();
+    diffStats = new Map();
+    gitBranch = "";
 
-    const newRootNode: FileNode = repo
-      ? buildFileTreeFromPaths(rootPath, getGitFileList(rootPath, reportGitError), gitStatus, diffStats, ignored, agentModifiedFiles)
-      : {
-        name: ".",
-        path: rootPath,
-        isDirectory: true,
-        realPath: safeRealPathSync(rootPath),
-        children: undefined,
-        expanded: true,
-        hasChangedChildren: false,
-      };
-
-    browser.root = newRootNode;
-
-    const safeMode = !repo && shouldSafeMode(rootPath);
-    browser.scanState.mode = repo ? "none" : safeMode ? "safe" : "full";
-    browser.scanState.isScanning = false;
-    browser.scanState.isPartial = safeMode;
+    browser.root = {
+      name: ".",
+      path: rootPath,
+      isDirectory: true,
+      realPath: safeRealPathSync(rootPath),
+      children: undefined,
+      expanded: true,
+      hasChangedChildren: false,
+    };
+    browser.scanState.mode = "none";
+    browser.scanState.isScanning = true;
+    browser.scanState.isPartial = false;
     browser.scanState.pending = 0;
-
     indexNodes(browser.root, browser.nodeByPath);
     refreshLists();
     browser.stats = getTreeStats(browser.root);
-
     browser.selectedIndex = 0;
     browser.searchQuery = "";
     browser.searchMode = false;
@@ -835,11 +828,45 @@ export function createFileBrowser(
     textInput.reset();
     browser.lastPollTime = Date.now();
 
-    if (repo) {
+    void (async () => {
+      const gitRepo = await isGitRepoAsync(rootPath);
+      if (generation !== rootGeneration) return;
+
+      if (!gitRepo) {
+        const safeMode = shouldSafeMode(rootPath);
+        browser.scanState.mode = safeMode ? "safe" : "full";
+        browser.scanState.isScanning = false;
+        browser.scanState.isPartial = safeMode;
+        if (browser.root) enqueueScan(browser.root, 0, true);
+        requestRender();
+        return;
+      }
+
+      const [statusResult, diffStatsResult, branch, fileListResult] = await Promise.all([
+        getGitStatusAsync(rootPath, {}),
+        getGitDiffStatsAsync(rootPath),
+        getGitBranchAsync(rootPath),
+        getGitFileListAsync(rootPath),
+      ]);
+      if (generation !== rootGeneration) return;
+
+      if (statusResult.failed) reportGitError("Git status");
+      if (diffStatsResult.failed) reportGitError("Git diff statistics");
+      if (fileListResult.failed) reportGitError("tracked file list");
+      repo = true;
+      gitStatus = statusResult.status;
+      diffStats = diffStatsResult.stats;
+      gitBranch = branch;
+      browser.root = buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles);
+      browser.scanState.mode = "none";
+      browser.scanState.isScanning = false;
+      browser.scanState.isPartial = false;
+      indexNodes(browser.root, browser.nodeByPath);
+      refreshLists();
+      browser.stats = getTreeStats(browser.root);
       queueLineCountsForDirectory(browser.root);
-    } else if (browser.root) {
-      enqueueScan(browser.root, 0, true);
-    }
+      requestRender();
+    })();
   }
 
   function setRoot(newRoot: string): void {
