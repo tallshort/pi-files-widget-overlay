@@ -600,7 +600,7 @@ describe("file browser expanded changed view", () => {
   });
   it("isolates @ search failures and clears them after success or cancellation", async () => {
     vi.resetModules();
-    const searches: Array<{ resolve: (output: string) => void; reject: (error: Error) => void }> = [];
+    const searches: Array<{ resolve: (output: string) => void; reject: (error: unknown) => void }> = [];
     vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
       const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
       return {
@@ -625,11 +625,11 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("@");
       browser.handleInput("f");
       await vi.advanceTimersByTimeAsync(150);
-      searches[0]!.reject(new Error("failed"));
+      searches[0]!.reject("failed\u001b[31m");
       await Promise.resolve();
       await Promise.resolve();
       browser.handleInput("\r");
-      expect(browser.render(70).join("\n")).toContain("Content search: failed");
+      expect(browser.render(70).join("\n")).toContain("Content search: failed�[31m");
 
       browser.handleInput("@");
       browser.handleInput("s");

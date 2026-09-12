@@ -7,6 +7,16 @@ const TERMINAL_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 export function sanitizeTerminalLabel(label: string): string {
   return label.replace(TERMINAL_CONTROL_CHARACTERS, "�");
 }
+
+/** Format unknown thrown values safely before displaying them in the terminal. */
+export function formatErrorMessage(error: unknown): string {
+  try {
+    return sanitizeTerminalLabel(error instanceof Error ? error.message : String(error));
+  } catch {
+    return "Unknown error";
+  }
+}
+
 export interface CommandLookupOptions {
   platform?: NodeJS.Platform;
   path?: string;

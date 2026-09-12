@@ -23,7 +23,7 @@ import {
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
 import type { DiffStats, FileNode, FlatNode } from "./types";
-import { isIgnoredStatus, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
+import { formatErrorMessage, isIgnoredStatus, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
 import { createTextInputBuffer } from "./input-utils";
 
@@ -409,7 +409,7 @@ export function createFileBrowser(
       })
       .catch(error => {
         if (generation === contentSearchGeneration && root === rootPath && !controller.signal.aborted) {
-          browser.contentSearchError = `Content search: ${sanitizeTerminalLabel(error.message)}`;
+          browser.contentSearchError = `Content search: ${formatErrorMessage(error)}`;
         }
       })
       .finally(() => {

@@ -200,7 +200,7 @@ describe("file viewer word wrapping", () => {
     expect(fileError.lines[0]).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
 
     const { root, filePath } = await createChangedFile();
-    const error = new Error("git failed\u001b[31m\nretry");
+    const error = "git failed\u001b[31m\nretry";
     vi.resetModules();
     vi.doMock("node:child_process", async importOriginal => {
       const actual = await importOriginal<typeof import("node:child_process")>();
@@ -219,6 +219,23 @@ describe("file viewer word wrapping", () => {
       expect(diffError.lines[0]).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
     } finally {
       vi.doUnmock("node:child_process");
+      vi.resetModules();
+    }
+  });
+
+  it("formats primitive file load failures safely", async () => {
+    const filePath = await createSourceFile("export const value = true;", "primitive-error.ts");
+    vi.resetModules();
+    vi.doMock("node:fs", async importOriginal => {
+      const actual = await importOriginal<typeof import("node:fs")>();
+      return { ...actual, readFileSync: () => { throw "read failed\u001b[31m\nretry"; } };
+    });
+    try {
+      const { loadFileContent: loadWithFailedRead } = await import("../src/file-viewer.ts");
+      const fileError = loadWithFailedRead(filePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+      expect(fileError.lines).toEqual(["Error loading file: read failed�[31m�retry"]);
+    } finally {
+      vi.doUnmock("node:fs");
       vi.resetModules();
     }
   });

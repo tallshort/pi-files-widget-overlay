@@ -4,7 +4,7 @@ import { execFileSync } from "node:child_process";
 import { readFileSync, statSync } from "node:fs";
 
 import { isGitRepo } from "./git";
-import { isImagePath, isMarkdownPath, sanitizeTerminalLabel, stripLeadingEmptyLines } from "./utils";
+import { formatErrorMessage, isImagePath, isMarkdownPath, stripLeadingEmptyLines } from "./utils";
 
 type UnifiedDiffLine = {
   kind: "add" | "remove" | "context";
@@ -191,9 +191,9 @@ export function loadFileContent(
         if (unsafeDiffKind) return unsafeDiffPlaceholder(unsafeDiffKind);
         diffOutput = diffOutput.replace(/\r\n/g, "\n");
         return { ...renderUnifiedDiff(diffOutput, termWidth, theme, wordWrap), renderedMarkdown: false };
-      } catch (e: any) {
-        const error = `Diff error: ${sanitizeTerminalLabel(e.message)}`;
-        return { lines: [error], rowGroups: [0], logicalLines: [error], renderedMarkdown: false };
+      } catch (error: unknown) {
+        const message = `Diff error: ${formatErrorMessage(error)}`;
+        return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false };
       }
     }
 
@@ -218,8 +218,8 @@ export function loadFileContent(
       rowGroups.push(...wrapped.map(() => group));
     }
     return { lines, rowGroups, logicalLines: raw.split("\n"), renderedMarkdown: false };
-  } catch (e: any) {
-    const error = `Error loading file: ${sanitizeTerminalLabel(e.message)}`;
-    return { lines: [error], rowGroups: [0], logicalLines: [error], renderedMarkdown: false };
+  } catch (error: unknown) {
+    const message = `Error loading file: ${formatErrorMessage(error)}`;
+    return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false };
   }
 }
