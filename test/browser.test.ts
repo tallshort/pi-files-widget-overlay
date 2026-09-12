@@ -267,6 +267,35 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("\r");
     expect(browser.render(60).join("\n")).toContain("export const safe = true;");
   });
+  it("sanitizes scan errors that include a directory name", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    const unsafeName = "blocked\u001b[31m-directory";
+    const blocked = join(root, unsafeName);
+    await mkdir(blocked);
+    vi.resetModules();
+    vi.doMock("node:fs/promises", async importOriginal => {
+      const actual = await importOriginal<typeof import("node:fs/promises")>();
+      return {
+        ...actual,
+        readdir: async (path: string, options: { withFileTypes: true }) => {
+          if (String(path).includes("blocked")) throw new Error("unavailable");
+          return actual.readdir(path, options);
+        },
+      };
+    });
+    try {
+      const { createFileBrowser: createBrowserWithFailedScan } = await import("../src/browser.ts");
+      const browser = createBrowserWithFailedScan(root, new Set(), theme, () => {}, () => {}, () => {});
+      await waitFor(() => browser.render(100).join("\n").includes("blocked�[31m-directory"));
+      browser.handleInput("\r");
+      await waitFor(() => browser.render(100).join("\n").includes("Unable to scan"));
+      expect(browser.render(100).join("\n")).not.toContain("\u001b[31m");
+    } finally {
+      vi.doUnmock("node:fs/promises");
+      vi.resetModules();
+    }
+  });
 
   it("keeps the provisional tree and applies status when tracked Git listing fails", async () => {
     vi.resetModules();

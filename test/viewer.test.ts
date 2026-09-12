@@ -6,7 +6,7 @@ import { promisify } from "node:util";
 
 import { CURSOR_MARKER } from "@earendil-works/pi-tui";
 import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
-import { afterEach, describe, expect, it } from "vitest";
+import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { getResponsivePanelHeight, OVERLAY_MAX_HEIGHT_RATIO } from "../src/constants.ts";
 import { formatCommentMessage } from "../src/comment.ts";
@@ -192,6 +192,36 @@ describe("file viewer word wrapping", () => {
     expect(loaded.logicalLines.join("\n")).toContain("const first = 2;");
   });
 
+  it("sanitizes file and diff load errors before rendering", async () => {
+    const unsafePath = join(tmpdir(), "missing\u001b[31m-file.ts");
+    const fileError = loadFileContent(unsafePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(fileError.lines[0]).toContain("Error loading file:");
+    expect(fileError.lines[0]).toContain("missing�[31m-file.ts");
+    expect(fileError.lines[0]).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+
+    const { root, filePath } = await createChangedFile();
+    const error = new Error("git failed\u001b[31m\nretry");
+    vi.resetModules();
+    vi.doMock("node:child_process", async importOriginal => {
+      const actual = await importOriginal<typeof import("node:child_process")>();
+      return {
+        ...actual,
+        execFileSync: (_command: string, args: string[]) => {
+          if (args[0] === "rev-parse") return "true";
+          throw error;
+        },
+      };
+    });
+    try {
+      const { loadFileContent: loadWithFailedDiff } = await import("../src/file-viewer.ts");
+      const diffError = loadWithFailedDiff(filePath, { cwd: root, diffMode: true, hasChanges: true, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+      expect(diffError.lines).toEqual(["Diff error: git failed�[31m�retry"]);
+      expect(diffError.lines[0]).not.toMatch(/[\u0000-\u001f\u007f-\u009f]/);
+    } finally {
+      vi.doUnmock("node:child_process");
+      vi.resetModules();
+    }
+  });
   it("keeps non-selectable previews navigable while blocking search, selection, and comments", async () => {
     const filePath = await createSourceFile(new Uint8Array([0x66, 0x6f, 0x6f, 0x00]), "blocked.txt");
     const comments: string[] = [];

@@ -751,7 +751,7 @@ export function createFileBrowser(
     } catch {
       if (generation === rootGeneration && tree === treeGeneration) {
         node.children = [];
-        reportError(`Unable to scan ${node === browser.root ? "directory" : node.name}`);
+        reportError(`Unable to scan ${node === browser.root ? "directory" : sanitizeTerminalLabel(node.name)}`);
       }
     } finally {
       if (generation === rootGeneration && tree === treeGeneration) {
