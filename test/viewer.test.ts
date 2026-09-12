@@ -124,7 +124,7 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("c");
     for (const character of "123456789") viewer.handleInput(character);
 
-    expect(viewer.render(12).some(line => line.includes("█"))).toBe(true);
+    expect(viewer.render(12).some(line => line.includes(`${CURSOR_MARKER}█`))).toBe(true);
     viewer.handleInput("\u0004");
     expect(comments).toEqual(["123456789"]);
   });

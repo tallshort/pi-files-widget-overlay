@@ -7,6 +7,7 @@ All notable changes to this extension will be documented in this file.
 ### Fixed
 - Position browser and viewer search cursors for IME composition; repeated `/` clears the query and Backspace cancels an empty search.
 - Keep comment-editor left/right keys within the editor and use them to move its insertion cursor.
+- Position the comment-editor cursor for IME composition, including after wrapped text.
 - Use stable background-activity labels instead of animated spinner frames to avoid terminal refresh artifacts.
 - Avoid double-counting staged Git diff statistics.
 

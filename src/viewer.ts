@@ -534,7 +534,12 @@ export function createViewer(
       wrappedLines.push("█");
     }
 
-    const cursorLine = Math.max(0, wrappedLines.findIndex(line => line.includes("█")));
+    const cursorLineIndex = wrappedLines.findIndex(line => line.includes("█"));
+    if (cursorLineIndex >= 0) {
+      const cursorColumn = wrappedLines[cursorLineIndex]!.indexOf("█");
+      wrappedLines[cursorLineIndex] = `${wrappedLines[cursorLineIndex]!.slice(0, cursorColumn)}${CURSOR_MARKER}${wrappedLines[cursorLineIndex]!.slice(cursorColumn)}`;
+    }
+    const cursorLine = Math.max(0, cursorLineIndex);
     const visibleStart = Math.min(
       Math.max(0, cursorLine - COMMENT_EDITOR_MAX_VISIBLE_LINES + 1),
       Math.max(0, wrappedLines.length - COMMENT_EDITOR_MAX_VISIBLE_LINES)
