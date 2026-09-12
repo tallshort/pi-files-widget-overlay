@@ -16,7 +16,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - `j`/`k` and arrow keys move through the tree; `Enter`, `h`/`l`, and arrow keys open or collapse entries.
 - Directory icons use `▸` and `▾`; symlink directories include a `↗` marker and can be traversed safely.
-- `/` filters the displayed list; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
+- `/` filters the displayed list; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `?` toggles between a curated one-line hint and complete two-line browser keybindings. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Git metadata refreshes asynchronously while the overlay is open, so existing tree state remains interactive until fresh metadata arrives; results from an earlier root are discarded after re-rooting.
 - A `🤖` marker records a file observed in a current-session `write` or `edit` tool result; it indicates tool activity, not authorship provenance. The marker clears when the session changes.
@@ -26,7 +26,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - The viewer keeps a real line cursor. `j`/`k` move the cursor and scroll only as needed to keep it visible; the active line is highlighted. `PgUp`/`PgDn` and `Ctrl-U`/`Ctrl-D` scroll the viewport by half a page of rendered rows, retaining the cursor when it remains visible or moving it to the newly visible first logical line. `g`/`G` jump to the top/bottom, and a numeric prefix with `G` jumps to a logical line in the current view.
 - Word wrap is disabled by default; `w` toggles it for code, diffs, and rendered Markdown.
-- `/` opens viewer search; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels it.
+- `/` opens viewer search; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels it. `?` toggles between a curated one-line hint and complete two-line viewer keybindings.
 - `v` starts or ends selection. The selection uses the existing gutter: `▸` marks the endpoint and `┃` marks the intervening lines.
 - For Markdown, `m` toggles rendered and raw source. Searching or selecting rendered Markdown first switches to raw mode, keeping match positions and comments source-aligned. On a terminal-width change, the viewer restores the current paragraph by matching rendered text; if no match is available, it resets to the top.
 - `d` toggles the unified diff of a changed tracked file. The extension removes Git's file headers and hunk metadata before displaying selectable diff lines. Comments use the visible diff excerpt and identify it as a diff comment rather than treating display positions as source line numbers.

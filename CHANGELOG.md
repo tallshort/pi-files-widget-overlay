@@ -6,6 +6,10 @@ All notable changes to this extension will be documented in this file.
 
 ### Added
 - Let `p` temporarily toggle the wide-terminal browser tree/preview split.
+- Let `?` toggle complete Browser and Viewer keybinding help.
+
+### Fixed
+- Keep expanded keybinding help within the overlay height when resizing Browser or Viewer panels.
 ## [0.5.0] - 2026-09-11
 
 ### Fixed

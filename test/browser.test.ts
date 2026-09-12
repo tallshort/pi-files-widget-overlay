@@ -164,8 +164,16 @@ describe("file browser expanded changed view", () => {
     const wide = browser.render(100);
     expect(wide.join("\n")).toContain("Directory selected - expand it in the file tree instead of opening it.");
     expect(wide.some(line => line.includes("│"))).toBe(true);
-    expect(wide.at(-1)).toContain("j/k: nav");
+    expect(wide.at(-1)).toContain("c/C: changes");
+    expect(wide.at(-1)).toContain("[]: prev/next change");
+    expect(wide.at(-1)).toContain("?: help");
     expect(wide.at(-1)).not.toContain("│");
+    browser.handleInput("?");
+    const fullHelp = browser.render(100).slice(-2).join("\n");
+    expect(fullHelp).toContain("?: hide");
+    expect(fullHelp).toContain("q/Esc: close");
+    browser.handleInput("?");
+    expect(browser.render(100).at(-1)).toContain("?: help");
 
     browser.handleInput("p");
     expect(browser.render(100).some(line => line.includes("│"))).toBe(false);
@@ -175,6 +183,24 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(79).some(line => line.includes("│"))).toBe(false);
     browser.handleInput("p");
     expect(browser.render(79).some(line => line.includes("│"))).toBe(false);
+  });
+
+  it("keeps expanded help within the overlay height after growing the browser", async () => {
+    const rows = Object.getOwnPropertyDescriptor(process.stdout, "rows");
+    Object.defineProperty(process.stdout, "rows", { configurable: true, value: 40 });
+    try {
+      const root = await createChangedRepository();
+      const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+      await waitForBackgroundWork();
+      browser.render(100);
+      browser.handleInput("?");
+      for (let i = 0; i < 10; i++) browser.handleInput("=");
+
+      expect(browser.render(100).length).toBeLessThanOrEqual(34);
+    } finally {
+      if (rows) Object.defineProperty(process.stdout, "rows", rows);
+      else delete (process.stdout as { rows?: number }).rows;
+    }
   });
   it("shows hidden project files while keeping .git internal", async () => {
     const root = await createChangedRepository();

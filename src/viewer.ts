@@ -57,6 +57,7 @@ interface ViewerState {
   lastLoadedMtimeMs: number | null;
   height: number;
   pendingCount: string;
+  showFullHelp: boolean;
 }
 
 export interface ViewerController {
@@ -107,6 +108,7 @@ export function createViewer(
     lastLoadedMtimeMs: null,
     height: getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8),
     pendingCount: "",
+    showFullHelp: false,
   };
 
   function isMarkdownFile(): boolean {
@@ -583,24 +585,24 @@ export function createViewer(
       lines.push(theme.fg("border", "─".repeat(width)));
     }
 
-    let help: string;
+    let helpLines: string[];
     if (state.mode === "comment") {
-      help = theme.fg("dim", "←/→: move cursor  Enter: newline  Ctrl+Enter/Ctrl+D: send  Esc: cancel");
+      helpLines = ["←/→: move cursor  Enter: newline  Ctrl+Enter/Ctrl+D: send  Esc: cancel"];
     } else if (state.mode === "select") {
-      help = theme.fg("dim", "j/k: extend  c: line comment  C: file comment  v/Esc: cancel");
+      helpLines = ["j/k or ↑/↓: extend  c: line comment  C: file comment  v/Esc: cancel"];
     } else if (state.mode === "search") {
-      help = theme.fg("dim", "Type to search  Enter: confirm  Esc: cancel");
+      helpLines = ["Type to search  Enter: confirm  Esc: cancel"];
     } else if (readOnly) {
-      help = theme.fg("dim", "Preview — select a file in the browser");
+      helpLines = ["Preview — select a file in the browser"];
+    } else if (state.showFullHelp) {
+      helpLines = [
+        "PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  /: search  n/N: match",
+        "v: select  d: diff  m: raw/render  []: prev/next change  +/-: height  ?: hide  q/Esc/←: back",
+      ];
     } else {
-      const isUntracked = state.file && isUntrackedStatus(state.file.gitStatus);
-      const markdownHelp = isMarkdownFile() && !state.diffMode ? "m: raw/render  " : "";
-      help = theme.fg(
-        "dim",
-        `j/k: cursor  v: select  /: search  n/N: next/prev match  w: wrap  ${markdownHelp}[]: files  ${state.file?.gitStatus && !isUntracked ? "d: diff  " : ""}q: back  ${pct}%`
-      );
+      helpLines = ["/: search  n/N: match  v: select  m: raw/render  d: diff  ?: help  q: back"];
     }
-    lines.push(truncateToWidth(help, width));
+    lines.push(...helpLines.map(line => truncateToWidth(theme.fg("dim", line), width)));
 
     return lines;
   }
@@ -621,7 +623,7 @@ export function createViewer(
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
       state.wordWrap = false;
-      state.pendingCount = "";
+      state.showFullHelp = false;
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.lastRenderWidth = 0;
@@ -639,6 +641,7 @@ export function createViewer(
       state.rawContent = "";
       state.renderMarkdown = true;
       state.wordWrap = false;
+      state.showFullHelp = false;
       state.pendingCount = "";
       state.lastLoadedMtimeMs = null;
       setMode("normal");
@@ -762,6 +765,18 @@ export function createViewer(
         return { type: "none" };
       }
 
+      if (matchesKey(data, "?") && state.mode === "normal") {
+        state.showFullHelp = !state.showFullHelp;
+        const maximumHeight = getResponsivePanelHeight(
+          MAX_VIEWER_HEIGHT,
+          MAX_VIEWER_HEIGHT,
+          state.showFullHelp ? 9 : 8,
+          process.stdout.rows,
+          OVERLAY_MAX_HEIGHT_RATIO
+        );
+        state.height = Math.min(state.height, maximumHeight);
+        return { type: "none" };
+      }
       if (matchesKey(data, "q") && state.mode !== "select") {
         return { type: "close" };
       }
@@ -860,7 +875,13 @@ export function createViewer(
         return { type: "none" };
       }
       if (matchesKey(data, "+") || matchesKey(data, "=")) {
-        const maximumHeight = getResponsivePanelHeight(MAX_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8, process.stdout.rows, OVERLAY_MAX_HEIGHT_RATIO);
+        const maximumHeight = getResponsivePanelHeight(
+          MAX_VIEWER_HEIGHT,
+          MAX_VIEWER_HEIGHT,
+          state.showFullHelp ? 9 : 8,
+          process.stdout.rows,
+          OVERLAY_MAX_HEIGHT_RATIO
+        );
         state.height = Math.min(maximumHeight, state.height + 5);
         clampScroll();
         return { type: "none" };

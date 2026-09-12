@@ -49,7 +49,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Usability
 
 - [x] Add a temporary `p` browser shortcut to toggle the wide-terminal 3:7 tree/preview split. The tree uses full width when disabled; narrow-terminal auto-disable behavior remains unchanged and state resets on reopen.
-- [ ] Replace truncated keybinding hints with a curated one-line default and temporary `?` toggle for the complete two-line keybinding help in both browser and viewer. Keep view-specific curated keys, reset on reopen, and preserve existing bindings such as `h`.
+- [x] Replace truncated keybinding hints with a curated one-line default and temporary `?` toggle for the complete two-line keybinding help in both browser and viewer. Keep view-specific curated keys, reset on reopen, and preserve existing bindings such as `h`.
 
 ### Design evaluation (not scheduled)
 

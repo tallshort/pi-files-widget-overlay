@@ -293,6 +293,7 @@ export function createFileBrowser(
   let previewPath: string | null = null;
   let lastRenderWidth = 0;
   let previewEnabled = true;
+  let showFullHelp = false;
   const textInput = createTextInputBuffer();
 
   const scanState: ScanState = {
@@ -1056,8 +1057,13 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "j/k: nav  p: preview  u: up  .: home  c/C: toggle changed / expanded changed  []: next/prev change  /: search  q: close") + changedIndicator;
-    lines.push(truncateToWidth(help, width));
+      : theme.fg("dim", "c/C: changes  []: prev/next change  /: search  p: preview  ?: help  q: close") + changedIndicator;
+    const fullHelp = [
+      theme.fg("dim", "h/l←→: folder  PgUp/PgDn: page  c: changed only  C: expand changed"),
+      theme.fg("dim", "[]: prev/next change  /: search  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
+    ];
+    if (!browser.searchMode && showFullHelp) lines.push(...fullHelp);
+    else lines.push(truncateToWidth(help, width));
 
     return lines;
   }
@@ -1142,6 +1148,18 @@ export function createFileBrowser(
       }
       return;
     }
+    if (matchesKey(data, "?")) {
+      showFullHelp = !showFullHelp;
+      const maximumHeight = getResponsivePanelHeight(
+        MAX_BROWSER_HEIGHT,
+        MAX_BROWSER_HEIGHT,
+        showFullHelp ? 10 : 9,
+        process.stdout.rows,
+        OVERLAY_MAX_HEIGHT_RATIO
+      );
+      browser.browserHeight = Math.min(browser.browserHeight, maximumHeight);
+      return;
+    }
     if (matchesKey(data, "p")) {
       if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
       return;
@@ -1212,7 +1230,13 @@ export function createFileBrowser(
       return;
     }
     if (matchesKey(data, "+") || matchesKey(data, "=")) {
-      const maximumHeight = getResponsivePanelHeight(MAX_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9, process.stdout.rows, OVERLAY_MAX_HEIGHT_RATIO);
+      const maximumHeight = getResponsivePanelHeight(
+        MAX_BROWSER_HEIGHT,
+        MAX_BROWSER_HEIGHT,
+        showFullHelp ? 10 : 9,
+        process.stdout.rows,
+        OVERLAY_MAX_HEIGHT_RATIO
+      );
       browser.browserHeight = Math.min(maximumHeight, browser.browserHeight + 5);
       return;
     }
@@ -1263,9 +1287,10 @@ export function createFileBrowser(
       previewPath = null;
     }
 
+    const footerLineCount = !browser.searchMode && showFullHelp ? 3 : 2;
     const treeLines = renderBrowser(treeWidth);
-    const treeContent = treeLines.slice(0, -2);
-    const fullWidthFooter = renderBrowser(width).slice(-2);
+    const treeContent = treeLines.slice(0, -footerLineCount);
+    const fullWidthFooter = renderBrowser(width).slice(-footerLineCount);
     const previewLines = selected ? previewViewer.render(previewWidth).slice(0, -2) : [theme.fg("dim", "Preview unavailable")];
     const lineCount = treeContent.length;
     const separator = theme.fg("borderMuted", "│");

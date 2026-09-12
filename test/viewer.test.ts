@@ -74,6 +74,13 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("N");
     expect(viewer.render(80)[0]).toContain("[1/2]");
 
+    viewer.handleInput("?");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("?: hide");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("q/Esc/←: back");
+    viewer.handleInput("?");
+    expect(viewer.render(100).at(-1)).toContain("?: help");
+    expect(viewer.render(100).at(-1)).toContain("m: raw/render");
+
     viewer.handleInput("/");
     expect(viewer.render(80)[0]).toContain(`/${CURSOR_MARKER}█`);
     viewer.handleInput("1");
@@ -86,6 +93,24 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("/");
     viewer.handleInput("\u007f");
     expect(viewer.render(80)[0]).not.toContain(CURSOR_MARKER);
+  });
+
+  it("keeps expanded help within the overlay height after growing the viewer", async () => {
+    const rows = Object.getOwnPropertyDescriptor(process.stdout, "rows");
+    Object.defineProperty(process.stdout, "rows", { configurable: true, value: 40 });
+    try {
+      const filePath = await createSourceFile();
+      const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+      viewer.setFile({ name: "height.ts", path: filePath, isDirectory: false });
+      viewer.render(100);
+      viewer.handleInput("?");
+      for (let i = 0; i < 10; i++) viewer.handleInput("=");
+
+      expect(viewer.render(100).length).toBeLessThanOrEqual(34);
+    } finally {
+      if (rows) Object.defineProperty(process.stdout, "rows", rows);
+      else delete (process.stdout as { rows?: number }).rows;
+    }
   });
   it("groups every visual row produced by one wrapped source line", async () => {
     const filePath = await createSourceFile();
@@ -224,6 +249,7 @@ describe("file viewer word wrapping", () => {
 
     viewer.handleInput("k");
     viewer.handleInput("v");
+    expect(viewer.render(100).at(-1)).toContain("j/k or ↑/↓: extend");
     viewer.handleInput("j");
     const selectionLines = viewer.render(24).filter(line => line.includes("<selectedBg>"));
     expect(selectionLines.join("\n")).toContain("┃");

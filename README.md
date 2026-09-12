@@ -71,6 +71,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `u`: go up one directory (re-root to parent)
 - `.`: jump back to the starting directory
 - `+` / `-`: increase/decrease browser height
+- `?`: toggle full keybindings
 - `q`: close
 
 ## Viewer Keybindings
@@ -91,6 +92,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `Ctrl+Enter` or `Ctrl+D`: send the comment (`Alt+Enter` also works when supported)
 - `]` / `[`: next/prev changed file
 - `+` / `-`: increase/decrease viewer height
+- `?`: toggle full keybindings
 - `q`, `Esc`, or `←`: back to browser
 
 ## Notes
