@@ -144,7 +144,7 @@ export async function getGitFileListAsync(cwd: string): Promise<{ files: string[
   try {
     const [trackedOutput, statusResult] = await Promise.all([
       runGit(cwd, ["ls-files", "-z"], 5000),
-      getGitStatusAsync(cwd, { includeIgnored: false }),
+      getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }),
     ]);
     const files = new Set(trackedOutput.split("\0").filter(Boolean));
     for (const filePath of statusResult.status.keys()) files.add(filePath);
@@ -172,10 +172,11 @@ export function getGitDiffStats(cwd: string, onError?: GitErrorReporter): Map<st
   return stats;
 }
 
-export async function getGitStatusAsync(cwd: string, options: { includeIgnored?: boolean } = {}): Promise<{ status: Map<string, string>; failed: boolean }> {
+export async function getGitStatusAsync(cwd: string, options: { includeIgnored?: boolean; includeUntracked?: boolean } = {}): Promise<{ status: Map<string, string>; failed: boolean }> {
   try {
     const args = ["status", "--porcelain=v1", "-z"];
     if (options.includeIgnored !== false) args.push("--ignored");
+    if (options.includeUntracked) args.push("-uall");
     const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd), runGit(cwd, args, 5000)]);
     return { status: parseGitStatus(output, prefix), failed: false };
   } catch {

@@ -4,12 +4,12 @@ import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
 
-import { CURSOR_MARKER } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
 import type { Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
-import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitStatus, getGitStatusAsync } from "../src/git.ts";
+import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -181,13 +181,21 @@ describe("file browser expanded changed view", () => {
     expect(wide.at(-1)).not.toContain("│");
     browser.handleInput("?");
     const fullHelp = browser.render(100).slice(-2).join("\n");
+    expect(fullHelp).toContain("h/l←→: folder");
+    expect(fullHelp).toContain("c: changed only");
     expect(fullHelp).toContain("?: hide");
     expect(fullHelp).toContain("q/Esc: close");
+    const narrowHelp = browser.render(24).filter(line => line.includes("h/l") || line.includes("[]:"));
+    expect(narrowHelp).toHaveLength(2);
+    expect(narrowHelp.every(line => visibleWidth(line) <= 24)).toBe(true);
     browser.handleInput("?");
     expect(browser.render(100).at(-1)).toContain("?: help");
 
     browser.handleInput("p");
     expect(browser.render(100).some(line => line.includes("│"))).toBe(false);
+    const beforePaging = browser.render(100).find(line => /\d+\/\d+ \(\d+%\)/.test(line));
+    browser.handleInput("\u001b[6~");
+    expect(browser.render(100).find(line => /\d+\/\d+ \(\d+%\)/.test(line))).not.toBe(beforePaging);
     browser.handleInput("p");
     expect(browser.render(100).some(line => line.includes("│"))).toBe(true);
 
@@ -254,13 +262,23 @@ describe("file browser expanded changed view", () => {
 
   it("loads Git metadata asynchronously", async () => {
     const root = await createChangedRepository();
-    const [statusResult, diffStatsResult, branch] = await Promise.all([getGitStatusAsync(root), getGitDiffStatsAsync(root), getGitBranchAsync(root)]);
+    await mkdir(join(root, "untracked", "deep"), { recursive: true });
+    await writeFile(join(root, "untracked", "deep", "file.ts"), "export const untracked = true;\n");
+    const [statusResult, diffStatsResult, branch, fileListResult] = await Promise.all([
+      getGitStatusAsync(root, { includeUntracked: true }),
+      getGitDiffStatsAsync(root),
+      getGitBranchAsync(root),
+      getGitFileListAsync(root),
+    ]);
 
     expect(statusResult).toMatchObject({ failed: false });
     expect(statusResult.status.get("src/nested/changed.ts")).toBe("M");
+    expect(statusResult.status.get("untracked/deep/file.ts")).toBe("??");
     expect(diffStatsResult).toMatchObject({ failed: false });
     expect(diffStatsResult.stats.get("src/nested/changed.ts")).toEqual({ additions: 1, deletions: 1 });
     expect(branch).not.toBe("");
+    expect(fileListResult).toMatchObject({ failed: false });
+    expect(fileListResult.files).toContain("untracked/deep/file.ts");
   });
 
   it("keeps Git metadata paths relative to a repository subdirectory", async () => {

@@ -96,9 +96,11 @@ export interface LoadedFileContent extends RenderedLines {
 type UnsafeFileKind = "binary" | "terminal-control";
 
 function getUnsafeFileKind(content: Buffer): UnsafeFileKind | null {
-  if (content.includes(0) || !Buffer.from(content.toString("utf-8"), "utf-8").equals(content)) return "binary";
-  for (const byte of content) {
-    if ((byte < 0x20 && byte !== 0x09 && byte !== 0x0a && byte !== 0x0d) || byte === 0x7f || (byte >= 0x80 && byte <= 0x9f)) {
+  const text = content.toString("utf-8");
+  if (content.includes(0) || !Buffer.from(text, "utf-8").equals(content)) return "binary";
+  for (const character of text) {
+    const codePoint = character.codePointAt(0) ?? 0;
+    if ((codePoint < 0x20 && codePoint !== 0x09 && codePoint !== 0x0a && codePoint !== 0x0d) || codePoint === 0x7f || (codePoint >= 0x80 && codePoint <= 0x9f)) {
       return "terminal-control";
     }
   }

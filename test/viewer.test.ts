@@ -75,6 +75,7 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(80)[0]).toContain("[1/2]");
 
     viewer.handleInput("?");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("PgUp/PgDn/Ctrl-U/Ctrl-D: page");
     expect(viewer.render(100).slice(-2).join("\n")).toContain("?: hide");
     expect(viewer.render(100).slice(-2).join("\n")).toContain("q/Esc/←: back");
     viewer.handleInput("?");
@@ -150,6 +151,16 @@ describe("file viewer word wrapping", () => {
     expect(loaded.lines[0]).toBe(`Preview unavailable: ${kind} file.`);
     expect(loaded.lines.join("\n")).not.toContain("\u001b");
   });
+  it("renders valid Unicode text while rejecting C1 control characters", async () => {
+    const unicodePath = await createSourceFile("const emoji = '🤖';\nconst punctuation = '“quoted”';\n", "unicode.ts");
+    const unicode = loadFileContent(unicodePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(unicode.lines.join("\n")).toContain("🤖");
+
+    const controlPath = await createSourceFile(new Uint8Array([0x63, 0xc2, 0x81]), "c1.txt");
+    const control = loadFileContent(controlPath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 80, renderMarkdown: false, wordWrap: false }, theme);
+    expect(control.lines[0]).toBe("Preview unavailable: terminal-control file.");
+  });
+
   it("keeps the comment cursor visible at the content width boundary", async () => {
     const filePath = await createSourceFile("const value = 1;\n");
     const comments: string[] = [];

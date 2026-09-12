@@ -754,7 +754,7 @@ export function createFileBrowser(
     const viewingFilePath = viewingFile?.path;
     gitRefreshGeneration = generation;
 
-    void Promise.all([getGitStatusAsync(refreshRoot, {}), getGitDiffStatsAsync(refreshRoot), getGitBranchAsync(refreshRoot)])
+    void Promise.all([getGitStatusAsync(refreshRoot, { includeUntracked: true }), getGitDiffStatsAsync(refreshRoot), getGitBranchAsync(refreshRoot)])
       .then(([statusResult, diffStatsResult, branch]) => {
         if (generation !== rootGeneration) return;
 
@@ -843,7 +843,7 @@ export function createFileBrowser(
       }
 
       const [statusResult, diffStatsResult, branch, fileListResult] = await Promise.all([
-        getGitStatusAsync(rootPath, {}),
+        getGitStatusAsync(rootPath, { includeUntracked: true }),
         getGitDiffStatsAsync(rootPath),
         getGitBranchAsync(rootPath),
         getGitFileListAsync(rootPath),
@@ -1089,7 +1089,7 @@ export function createFileBrowser(
       theme.fg("dim", "h/l←→: folder  PgUp/PgDn: page  c: changed only  C: expand changed"),
       theme.fg("dim", "[]: prev/next change  /: search  u: parent  .: home  p: preview  +/-: height  ?: hide  q/Esc: close") + changedIndicator,
     ];
-    if (!browser.searchMode && showFullHelp) lines.push(...fullHelp);
+    if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
 
     return lines;
@@ -1114,7 +1114,7 @@ export function createFileBrowser(
 
   function handleBrowserInput(data: string): void {
     const previewNavigation = /^\d$/.test(data) || matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u") || matchesKey(data, "w");
-    if (!browser.searchMode && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
+    if (!browser.searchMode && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
       previewViewer.handleInput(data);
       return;
     }
