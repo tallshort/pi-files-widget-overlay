@@ -192,17 +192,18 @@ export default function editorExtension(pi: ExtensionAPI): void {
           };
           const border = (character: string) => theme.fg("border", character);
           const activity = browser.getActivityLabel();
+          const copyHint = browser.isPathCopied() ? " Path copied" : "";
           const restoredPath = browser.getRestorePath();
           const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ");
           const safeRootPath = sanitizeRestorePathLabel(browser.getRootPath());
           const safeRestoredPath = restoredPath ? sanitizeRestorePathLabel(restoredPath) : null;
-          const { availableWidth, rootWidth } = getOverlayPathWidths(innerWidth, visibleWidth(prefix), activity, !!safeRestoredPath);
+          const { availableWidth, rootWidth } = getOverlayPathWidths(innerWidth, visibleWidth(prefix), `${activity}${copyHint}`, !!safeRestoredPath);
           const root = truncatePathTail(safeRootPath, rootWidth);
           const restoredPrefix = " ↳ restored: ";
           const restored = safeRestoredPath
             ? theme.fg("dim", `${restoredPrefix}${truncatePathTail(safeRestoredPath, Math.max(0, availableWidth - visibleWidth(root) - visibleWidth(restoredPrefix)))}`)
             : "";
-          const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + " ");
+          const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + (copyHint ? theme.fg("dim", copyHint) : "") + " ");
 
           return [
             border(`┌${"─".repeat(innerWidth)}┐`),

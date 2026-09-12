@@ -34,6 +34,7 @@ export interface BrowserController {
   getRootPath(): string;
   getActivityLabel(): string;
   getRestorePath(): string | null;
+  isPathCopied(): boolean;
   render(width: number): string[];
   handleInput(data: string): void;
   getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null };
@@ -300,8 +301,8 @@ export function createFileBrowser(
   let gitBranch = "";
   const gitErrors = new Set<string>();
 
-  const viewer = createViewer({ getRoot: () => rootPath, projectCwd }, theme, requestComment);
-  const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true }, theme, requestComment);
+  const viewer = createViewer({ getRoot: () => rootPath, projectCwd, requestRender }, theme, requestComment);
+  const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true, requestRender }, theme, requestComment);
   let previewPath: string | null = null;
   let lastRenderWidth = 0;
   let previewEnabled = true;
@@ -1308,10 +1309,10 @@ export function createFileBrowser(
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  ?: help  q: close") + changedIndicator;
+      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  y: copy path  ?: help") + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-      theme.fg("dim", "C: expand  []: change  /:@ search  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height") + changedIndicator,
+      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height") + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
@@ -1419,6 +1420,14 @@ export function createFileBrowser(
     }
     if (matchesKey(data, "p")) {
       if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
+      return;
+    }
+    if (matchesKey(data, "y")) {
+      const selected = displayList[browser.selectedIndex]?.node;
+      if (selected) {
+        previewViewer.setFile(selected);
+        previewViewer.copyPath();
+      }
       return;
     }
     if (matchesKey(data, "u")) {
@@ -1573,6 +1582,9 @@ export function createFileBrowser(
       };
     },
 
+    isPathCopied(): boolean {
+      return !viewer.isOpen() && (!previewEnabled || lastRenderWidth < MIN_PREVIEW_WIDTH) && previewViewer.isPathCopied();
+    },
     getRestorePath(): string | null {
       return restoreNotice;
     },

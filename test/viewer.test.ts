@@ -5,8 +5,13 @@ import { dirname, join } from "node:path";
 import { promisify } from "node:util";
 
 import { CURSOR_MARKER } from "@earendil-works/pi-tui";
-import { initTheme, type Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, initTheme, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
+
+vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
+  ...await importOriginal<typeof import("@earendil-works/pi-coding-agent")>(),
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 
 import { getResponsivePanelHeight, OVERLAY_MAX_HEIGHT_RATIO } from "../src/constants.ts";
 import { formatCommentMessage } from "../src/comment.ts";
@@ -56,6 +61,20 @@ afterEach(async () => {
 });
 
 describe("file viewer word wrapping", () => {
+  it("copies an absolute path and dismisses its title hint", async () => {
+    vi.useFakeTimers();
+    const filePath = await createSourceFile();
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "wrapped.ts", path: filePath, isDirectory: false });
+    viewer.handleInput("y");
+    await Promise.resolve();
+    expect(copyToClipboard).toHaveBeenCalledWith(filePath);
+    expect(viewer.render(100)[0]).toContain("Path copied");
+    vi.advanceTimersByTime(3000);
+    expect(viewer.render(100)[0]).not.toContain("Path copied");
+    vi.useRealTimers();
+  });
+
   it("derives initial and maximum panel heights from terminal rows", () => {
     expect(getResponsivePanelHeight(28, 40, 9, 24)).toBe(11);
     expect(getResponsivePanelHeight(29, 50, 8, 60)).toBe(43);
@@ -74,6 +93,8 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(80)[0]).toContain("[1/2]");
     viewer.handleInput("n");
     expect(viewer.render(80)[0]).toContain("[2/2]");
+    viewer.handleInput("y");
+    expect(viewer.render(100).at(-1)).toContain("y: copy path");
 
     viewer.handleInput("N");
     expect(viewer.render(80)[0]).toContain("[1/2]");

@@ -16,7 +16,7 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 
 - `j`/`k` and arrow keys move through the tree; `Enter`, `h`/`l`, and arrow keys open or collapse entries.
 - Directory icons use `▸` and `▾`; symlink directories include a `↗` marker and can be traversed safely.
-- `/` filters by filename; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `@` filters by literal file content using a cached per-root Pi SDK grep tool: it debounces input for 150 ms, limits context and result count, cancels pending work on query/root/overlay changes, and discards stale results. `?` toggles between a curated one-line hint and complete two-line browser keybindings. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
+- `/` filters by filename; pressing `/` again clears the query, while `Esc` or `Backspace` on an empty query cancels search. `@` filters by literal file content using a cached per-root Pi SDK grep tool: it debounces input for 150 ms, limits context and result count, cancels pending work on query/root/overlay changes, and discards stale results. `y` copies the selected file or directory's absolute path. `?` toggles between a curated one-line hint and complete two-line browser keybindings. `c` toggles changed files, `C` toggles the expanded changed view (expanding all changed ancestors when enabled), and `[`/`]` move between changes.
 - `u` re-roots at the parent directory and `.` returns to the starting directory.
 - Browse-position restoration is disabled by default. Users can opt in through the global Pi settings file, which the extension reads but never writes:
 

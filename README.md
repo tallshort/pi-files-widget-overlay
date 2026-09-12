@@ -74,6 +74,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `Enter`: open file / expand folder
 - `h/l` or `←/→`: collapse/expand folder
 - `p`: toggle the wide-terminal tree/preview split
+- `y`: copy the selected file’s absolute path
 - `PgUp/PgDn`: page the browser tree in the narrow single-column layout
 - `c`: toggle changed-only view
 - `C`: toggle the expanded changed view; enabling it expands every directory containing changes
@@ -94,6 +95,7 @@ On wide terminals, the browser shows a read-only 3:7 tree/preview split. The pre
 - `d`: toggle diff (tracked files only)
 - `m`: toggle rendered/raw view for Markdown files
 - `w`: toggle word wrap (disabled by default)
+- `y`: copy the current file’s absolute path
 - `/`: search (press `/` again to clear; `Esc` or `Backspace` on an empty query exits)
 - `n` / `N`: next/prev match
 - `v`: select mode (line selection)

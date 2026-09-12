@@ -1,4 +1,4 @@
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
 import { relative } from "node:path";
@@ -69,12 +69,15 @@ export interface ViewerController {
   close(): void;
   render(width: number): string[];
   handleInput(data: string): ViewerAction;
+  copyPath(): void;
+  isPathCopied(): boolean;
 }
 
 export interface ViewerConfig {
   getRoot: () => string;
   projectCwd: string;
   readOnly?: boolean;
+  requestRender?: () => void;
 }
 
 export function createViewer(
@@ -82,7 +85,8 @@ export function createViewer(
   theme: Theme,
   requestComment: (payload: CommentPayload, comment: string) => void
 ): ViewerController {
-  const { getRoot, projectCwd, readOnly = false } = config;
+  const { getRoot, projectCwd, readOnly = false, requestRender } = config;
+  let pathCopiedUntil = 0;
   const searchInput = createTextInputBuffer();
   const commentInput = createTextInputBuffer({ preserveNewlines: true });
   const commentSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -502,7 +506,9 @@ export function createViewer(
     if (!state.file) return "";
     const isUntracked = isUntrackedStatus(state.file.gitStatus);
 
-    let header = theme.bold(theme.fg("text", sanitizeTerminalLabel(state.file.name)));
+    const copyHint = Date.now() < pathCopiedUntil ? theme.fg("dim", " Path copied") : "";
+    const fileNameWidth = Math.max(0, width - visibleWidth(copyHint));
+    let header = theme.bold(theme.fg("text", truncateToWidth(sanitizeTerminalLabel(state.file.name), fileNameWidth, "…"))) + copyHint;
     if (isUntracked) {
       header += theme.fg("dim", " [UNTRACKED]");
     } else if (state.diffMode) {
@@ -603,15 +609,26 @@ export function createViewer(
       helpLines = ["Preview — select a file in the browser"];
     } else if (state.showFullHelp) {
       helpLines = [
-        "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  /: search  n/N: match",
-        "v: select  d: diff  m: raw/render  []: prev/next change  +/-: height  ?: hide  q/Esc/←: back",
+        "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  y: copy path",
+        "v: select  d: diff  m: render  []: change  +/-: height  ?: hide  q/Esc/←: back",
       ];
     } else {
-      helpLines = ["/: search  n/N: match  v: select  m: raw/render  d: diff  ?: help  q: back"];
+      helpLines = ["/: search  n/N: match  v: select  m: raw/render  d: diff  y: copy path  ?: help  q: back"];
     }
     lines.push(...helpLines.map(line => truncateToWidth(theme.fg("dim", line), width)));
 
     return lines;
+  }
+
+  function copyPath(): void {
+    const copiedPath = state.file?.path;
+    if (!copiedPath) return;
+    void copyToClipboard(copiedPath).then(() => {
+      if (state.file?.path !== copiedPath) return;
+      pathCopiedUntil = Date.now() + 3000;
+      requestRender?.();
+      setTimeout(() => requestRender?.(), 3000);
+    }).catch(() => {});
   }
 
   return {
@@ -622,6 +639,8 @@ export function createViewer(
     getFile(): FileNode | null {
       return state.file;
     },
+    copyPath,
+    isPathCopied(): boolean { return Date.now() < pathCopiedUntil; },
 
     setFile(file: FileNode): void {
       state.file = file;
@@ -900,6 +919,10 @@ export function createViewer(
       if (matchesKey(data, "-") || matchesKey(data, "_")) {
         state.height = Math.max(MIN_PANEL_HEIGHT, state.height - 5);
         clampScroll();
+        return { type: "none" };
+      }
+      if (matchesKey(data, "y") && state.mode === "normal") {
+        copyPath();
         return { type: "none" };
       }
       if (matchesKey(data, "w") && state.mode !== "select") {

@@ -83,7 +83,25 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("C");
     expect(browser.render(100).join("\n")).toContain("unchanged.ts");
   });
+  it("copies the selected directory path", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
 
+    browser.handleInput("y");
+    await Promise.resolve();
+    expect(browser.isPathCopied()).toBe(true);
+  });
+
+  it("shows the path-copy shortcut in the default browser help", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
+
+    const help = browser.render(160).at(-1) ?? "";
+    expect(help).toContain("y: copy path");
+    expect(help).not.toContain("q: close");
+  });
   it("keeps top-level directories with only deep tracked paths", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
@@ -250,6 +268,7 @@ describe("file browser expanded changed view", () => {
   it("sanitizes restore labels and reserves header room for scanning", () => {
     expect(sanitizeRestorePathLabel("safe\u001b[31mname")).toBe("safe�[31mname");
     expect(getOverlayPathWidths(40, 10, "… scanning", true)).toEqual({ availableWidth: 18, rootWidth: 9 });
+    expect(getOverlayPathWidths(40, 10, " Path copied", false).availableWidth).toBeLessThan(getOverlayPathWidths(40, 10, "", false).availableWidth);
   });
   it("sanitizes control characters in filesystem labels without changing the opened path", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
