@@ -61,19 +61,19 @@ npm run typecheck
 | `h` / `l` or `←` / `→` | Collapse/expand a directory; `l` / `→` opens a selected file. |
 | `PgUp` / `PgDn` | Page through the tree in the single-column layout. |
 | `p` | Toggle the tree/preview split on wide terminals. |
-| `y` | Copy the selected file's absolute path. |
+| `y` | Copy the selected file or directory's absolute path. |
 | `c` | Toggle changed-only view. |
 | `C` | Toggle expanded changed view. |
 | `[` / `]` | Previous/next changed file. |
-| `/` | Search file names; press `/` again to clear. |
-| `@` | Search literal file content asynchronously; press `@` again to clear. |
+| `/` | Search file names. |
+| `@` | Search literal file content asynchronously. |
 | `u` | Re-root at the parent directory. |
 | `.` | Return to the command's starting directory. |
-| `+` / `-` | Increase/decrease panel height. |
+| `+` / `=` and `-` / `_` | Increase/decrease panel height. |
 | `?` | Show/hide the complete browser help. |
 | `q` / `Esc` | Close the overlay. |
 
-While either search is active, type to search, use `↑` / `↓` to move, press `Enter` to keep the query, and press `Esc` or `Backspace` with an empty query to cancel it.
+While either search is active, type to search and use `↑` / `↓` to move. `Enter` keeps the query; `Esc` always cancels it; `Backspace` deletes input and cancels when the query is empty. Press the active search key again to clear the query.
 
 ## Viewer keybindings
 
@@ -86,17 +86,19 @@ While either search is active, type to search, use `↑` / `↓` to move, press 
 | `m` | Toggle rendered/raw Markdown. |
 | `w` | Toggle word wrap. |
 | `y` | Copy the current file's absolute path. |
-| `/` | Search; press `/` again to clear. |
+| `/` | Enter search mode. |
 | `n` / `N` | Next/previous search match. |
 | `v` | Enter or leave line-selection mode. |
 | `c` | Comment on selected lines. |
 | `C` | Comment on the whole file while selecting. |
 | `[` / `]` | Previous/next changed file. |
-| `+` / `-` | Increase/decrease panel height. |
+| `+` / `=` and `-` / `_` | Increase/decrease panel height. |
 | `?` | Show/hide the complete viewer help. |
 | `q`, `Esc`, or `←` | Return to the browser when not searching, selecting, or editing a comment. |
 
-In search mode, type to search, press `Enter` to keep the query, and press `Esc`, `←`, or `Backspace` with an empty query to leave it. In selection mode, `j` / `k` or `↑` / `↓` extends the selection; `c` opens the line-comment editor and `C` opens the file-comment editor. In the comment editor, `Enter` adds a line, `←` / `→` moves the cursor, `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment, and `Esc` cancels.
+In search mode, type to search and press `Enter` to keep the query. `Esc` or `←` exits search; `Backspace` deletes input and exits only when the query is empty; pressing `/` again clears the query. With a kept query, `Esc` or `←` clears that query before returning to the browser.
+
+In selection mode, `j` / `k` or `↑` / `↓`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl-D`, and `g` / `G` extend or reset the selection; `Esc`, `←`, or `v` cancels it. `c` opens the line-comment editor and `C` opens the file-comment editor. In the comment editor, `Enter` or `Shift+Enter` adds a line, `←` / `→` moves the cursor, `Backspace` deletes, `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment, and `Esc` cancels.
 
 ## Configuration
 
@@ -115,7 +117,7 @@ The extension reads this setting but never writes it. An explicit `/readfiles <p
 ## Notes and edge cases
 
 - The overlay is centered at 95% of terminal width with a one-cell margin. Its maximum height is 95% of the terminal; panels start at 85% and `+` / `-` adjust within that limit.
-- Wide terminals use a read-only 3:7 tree/preview split. The preview follows the selected item; `g` / `G`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl-D`, and `w` control it without enabling edits.
+- Wide terminals use a read-only 3:7 tree/preview split. The preview follows the selected item; `g` / `G`, `<count>G`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl-D`, and `w` control it without enabling edits.
 - Hidden project files such as `.pi/` and `.github/` remain visible. `.git/` and common dependency/build caches remain hidden.
 - Directory symlinks show `↗` and can be expanded. Untracked files show `[UNTRACKED]` and open in normal view.
 - Searching or selecting rendered Markdown switches it to raw source so matches, line numbers, and comments stay aligned. On terminal-width changes, rendered Markdown keeps the current paragraph when it can identify it; otherwise it returns to the top.

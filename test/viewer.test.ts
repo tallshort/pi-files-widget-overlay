@@ -428,6 +428,24 @@ describe("file viewer word wrapping", () => {
     ]);
   });
 
+  it("keeps a project-relative comment path for a file starting with two dots", async () => {
+    const filePath = await createSourceFile("const local = true;\n", "..env");
+    const comments: Array<{ payload: CommentPayload; comment: string }> = [];
+    const viewer = createViewer(
+      { getRoot: () => dirname(filePath), projectCwd: dirname(filePath) },
+      theme,
+      (payload, comment) => comments.push({ payload, comment })
+    );
+    viewer.setFile({ name: "..env", path: filePath, isDirectory: false });
+    viewer.render(80);
+    viewer.handleInput("v");
+    viewer.handleInput("C");
+    viewer.handleInput("note");
+    viewer.handleInput("\u0004");
+
+    expect(comments[0]?.payload.relPath).toBe("..env");
+  });
+
   it("normalizes CRLF selected text and range before sending a comment", async () => {
     const filePath = await createSourceFile("const first = 1;\r\nconst second = 2;\r\nconst third = 3;\r\n", "crlf-comment.ts");
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];

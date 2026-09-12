@@ -1,7 +1,7 @@
 import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
-import { relative } from "node:path";
+import { relative, sep } from "node:path";
 
 import {
   DEFAULT_VIEWER_HEIGHT,
@@ -471,7 +471,7 @@ export function createViewer(
     if (!state.file) return null;
 
     const rel = relative(projectCwd, state.file.path);
-    const relPath = !rel || rel.startsWith("..") ? state.file.path : rel;
+    const relPath = !rel || rel === ".." || rel.startsWith(`..${sep}`) ? state.file.path : rel;
     const ext = state.diffMode ? "diff" : state.file.name.split(".").pop() || "";
     if (state.commentScope === "file") {
       return { relPath, lineRange: "file", ext, selectedText: "", isFile: true };
