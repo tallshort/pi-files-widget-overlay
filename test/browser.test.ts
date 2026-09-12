@@ -406,6 +406,21 @@ describe("file browser expanded changed view", () => {
     expect(rendered).not.toContain("unchanged.ts");
   });
 
+  it("keeps the selected content result when confirming search", async () => {
+    const root = await createChangedRepository();
+    const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
+    const browser = createFileBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
+    await waitForBackgroundWork();
+
+    browser.handleInput("@");
+    for (const character of "true") browser.handleInput(character);
+    await waitFor(() => browser.render(100).filter(line => line.includes(".ts")).length >= 2);
+    browser.handleInput("\u001b[B");
+    const selectedBefore = browser.render(100).find(line => line.includes("[selected]"));
+    browser.handleInput("\r");
+
+    expect(browser.render(100).find(line => line.includes("[selected]"))).toBe(selectedBefore);
+  });
   it("shares changed-only state between c and C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

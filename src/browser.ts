@@ -1232,7 +1232,6 @@ export function createFileBrowser(
         textInput.reset();
       } else if (matchesKey(data, Key.enter)) {
         browser.searchMode = false;
-        browser.selectedIndex = 0;
         textInput.reset();
       } else if (matchesKey(data, Key.backspace)) {
         if (browser.searchQuery) {
