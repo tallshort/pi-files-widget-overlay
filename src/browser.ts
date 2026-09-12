@@ -404,7 +404,9 @@ export function createFileBrowser(
         browser.selectedIndex = Math.min(browser.selectedIndex, Math.max(0, getDisplayList().length - 1));
       })
       .catch(error => {
-        if (generation === contentSearchGeneration && !controller.signal.aborted) browser.errorMessage = `Content search: ${error.message}`;
+        if (generation === contentSearchGeneration && root === rootPath && !controller.signal.aborted) {
+          browser.errorMessage = `Content search: ${sanitizeTerminalLabel(error.message)}`;
+        }
       })
       .finally(() => {
         if (generation === contentSearchGeneration) {

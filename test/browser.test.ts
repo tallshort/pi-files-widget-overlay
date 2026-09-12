@@ -600,14 +600,19 @@ describe("file browser expanded changed view", () => {
   });
   it("discards stale @ content searches after query, root, and overlay changes", async () => {
     vi.resetModules();
-    const searches: Array<{ root: string; pattern: string; resolve: (output: string) => void }> = [];
+    const searches: Array<{ root: string; pattern: string; resolve: (output: string) => void; reject: (error: Error) => void }> = [];
     vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
       const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
       return {
         ...actual,
         createGrepTool: (root: string) => ({
-          execute: (_id: string, input: { pattern: string }) => new Promise(resolve => {
-            searches.push({ root, pattern: input.pattern, resolve: output => resolve({ content: [{ type: "text", text: output }] }) });
+          execute: (_id: string, input: { pattern: string }) => new Promise((resolve, reject) => {
+            searches.push({
+              root,
+              pattern: input.pattern,
+              resolve: output => resolve({ content: [{ type: "text", text: output }] }),
+              reject: error => reject(error),
+            });
           }),
         }),
       };
@@ -646,7 +651,7 @@ describe("file browser expanded changed view", () => {
       expect(searches).toHaveLength(3);
       browser.handleInput("\r");
       browser.handleInput("u");
-      searches[2]!.resolve("old.ts:1: old");
+      searches[2]!.reject(new Error("stale\u001b[31m failure"));
       await Promise.resolve();
       expect(browser.getRootPath()).toBe(parent);
       expect(browser.render(60).join("\n")).not.toContain("old.ts");
