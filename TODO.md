@@ -39,3 +39,19 @@ This is the backlog for the current floating-overlay implementation, not the his
 ### Agent-awareness
 
 - [x] Make current-session agent activity tracking complete and explicit: handle `write.path` and `edit.file`, normalize paths, and label it as observed tool activity rather than human-vs-agent provenance.
+
+## Planned work
+
+### Performance
+
+- [ ] Evaluate lazy-loading browser modules: inspect whether `src/index.ts` eagerly imports tree, viewer, Git, and search modules; if so, move browser-only imports behind `/readfiles` command invocation without changing manifest, dependencies, or behavior. Benchmark before/after and document the result in README when adopted.
+
+### Usability
+
+- [ ] Add a temporary `p` browser shortcut to toggle the wide-terminal 3:7 tree/preview split. The tree must use full width when disabled; keep narrow-terminal auto-disable behavior unchanged and reset to the default on reopen.
+- [ ] Replace truncated keybinding hints with a curated one-line default and temporary `?` toggle for the complete two-line keybinding help in both browser and viewer. Keep view-specific curated keys, reset on reopen, and preserve existing bindings such as `h`.
+
+### Design evaluation (not scheduled)
+
+- [ ] Evaluate multi-root `/readfiles` support before implementation: decide how roots are defined (arguments, config, or runtime), whether `Tab` cycles or opens a picker, header/position presentation, and missing-root/root-switch reset behavior. Preserve single-root compatibility and keep the selected root temporary.
+- [ ] Evaluate multi-file content search before implementation: add an `@` content filter alongside filename `/` search, group matches by file with counts and line jumps, and use SDK `createGrepTool` (cached per root, `context: 0`, bounded results) rather than spawning grep/rg.
