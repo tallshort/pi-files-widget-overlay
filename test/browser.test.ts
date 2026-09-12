@@ -5,9 +5,13 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import type { Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
+vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
+  ...await importOriginal<typeof import("@earendil-works/pi-coding-agent")>(),
+  copyToClipboard: vi.fn().mockResolvedValue(undefined),
+}));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
 import { getOverlayPathWidths, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
@@ -65,8 +69,23 @@ async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<voi
     await new Promise(resolve => setTimeout(resolve, 20));
   }
 }
+async function removeDirectoryWithRetry(directory: string): Promise<void> {
+  // `git status` refreshes its index via a short-lived lock. Browser instances
+  // intentionally load Git metadata in the background, so CI can reach cleanup
+  // while that lock is still being removed on Linux.
+  for (let attempt = 0; ; attempt++) {
+    try {
+      await rm(directory, { recursive: true, force: true, maxRetries: 0 });
+      return;
+    } catch (error: unknown) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOTEMPTY" || attempt === 9) throw error;
+      await new Promise(resolve => setTimeout(resolve, 20));
+    }
+  }
+}
+
 afterEach(async () => {
-  await Promise.all(directories.splice(0).map(directory => rm(directory, { recursive: true, force: true })));
+  await Promise.all(directories.splice(0).map(removeDirectoryWithRetry));
 });
 
 describe("file browser expanded changed view", () => {
@@ -90,6 +109,7 @@ describe("file browser expanded changed view", () => {
 
     browser.handleInput("y");
     await Promise.resolve();
+    expect(copyToClipboard).toHaveBeenCalledWith(browser.getBrowsePosition().directoryPath);
     expect(browser.isPathCopied()).toBe(true);
   });
 
