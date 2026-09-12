@@ -20,6 +20,7 @@
 2. Add or update focused regression coverage for behavior changes.
 3. Run `npm test`, `npm run typecheck`, and `git diff --check`.
 4. Update `README.md`, `docs/DESIGN.md`, `TODO.md`, or `CHANGELOG.md` only when the changed behavior makes that document stale.
+5. After a self-contained feature or fix passes required validation and its affected documentation is updated, commit its code, tests, and docs in one single-purpose commit unless the user asks to keep it uncommitted.
 
 ## Release checks
 
