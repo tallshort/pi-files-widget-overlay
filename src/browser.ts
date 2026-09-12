@@ -3,7 +3,7 @@ import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@
 import { lstatSync, realpathSync, statSync } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
-import { join, relative, resolve, sep } from "node:path";
+import { dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   DEFAULT_BROWSER_HEIGHT,
@@ -35,6 +35,7 @@ export interface BrowserController {
   getActivityLabel(): string;
   render(width: number): string[];
   handleInput(data: string): void;
+  getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null };
   invalidate(): void;
 }
 
@@ -281,7 +282,8 @@ export function createFileBrowser(
   onClose: () => void,
   requestComment: (payload: CommentPayload, comment: string) => void,
   requestRender: () => void,
-  projectCwd: string = initialPath
+  projectCwd: string = initialPath,
+  initialSelectedPath?: string
 ): BrowserController {
   const ignored = getIgnoredNames();
 
@@ -298,6 +300,7 @@ export function createFileBrowser(
   let lastRenderWidth = 0;
   let previewEnabled = true;
   let showFullHelp = false;
+  let pendingSelectedPath = initialSelectedPath ? resolve(initialSelectedPath) : null;
   const textInput = createTextInputBuffer();
 
   const scanState: ScanState = {
@@ -411,6 +414,14 @@ export function createFileBrowser(
     browser.fullList = browser.root ? flattenTree(browser.root, 0, true, true) : [];
   }
 
+  function restoreSelectedFile(): boolean {
+    if (!pendingSelectedPath) return false;
+    const index = getDisplayList().findIndex(item => item.node.path === pendingSelectedPath && !item.node.isDirectory);
+    if (index === -1) return false;
+    browser.selectedIndex = index;
+    pendingSelectedPath = null;
+    return true;
+  }
   function reportError(message: string): void {
     browser.errorMessage ??= message;
     requestRender();
@@ -663,6 +674,7 @@ export function createFileBrowser(
     updateTreeStats(browser.root);
     browser.stats = getTreeStats(browser.root);
     refreshLists();
+    restoreSelectedFile();
     if (browser.focusFirstChildOf) {
       const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
       if (directory && focusFirstChild(directory)) browser.focusFirstChildOf = null;
@@ -926,6 +938,7 @@ export function createFileBrowser(
       browser.scanState.isPartial = false;
       indexNodes(browser.root, browser.nodeByPath);
       refreshLists();
+      restoreSelectedFile();
       browser.stats = getTreeStats(browser.root);
       queueLineCountsForDirectory(browser.root);
       requestRender();
@@ -936,6 +949,7 @@ export function createFileBrowser(
     if (viewer.isOpen()) {
       viewer.close();
     }
+    pendingSelectedPath = null;
     stopBackgroundTasks();
     scanQueue.length = 0;
     scanQueued.clear();
@@ -1400,6 +1414,15 @@ export function createFileBrowser(
   return {
     getRootPath(): string {
       return formatRootPath(rootPath);
+    },
+    getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null } {
+      const selected = getDisplayList()[browser.selectedIndex]?.node;
+      const selectedFilePath = selected && !selected.isDirectory ? selected.path : null;
+      return {
+        rootPath,
+        directoryPath: selected?.isDirectory ? selected.path : selectedFilePath ? dirname(selectedFilePath) : rootPath,
+        selectedFilePath,
+      };
     },
 
     getActivityLabel(): string {

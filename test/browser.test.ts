@@ -10,6 +10,7 @@ import { afterEach, describe, expect, it } from "vitest";
 
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
+import { resolveRestoredPosition } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -157,6 +158,36 @@ describe("file browser expanded changed view", () => {
     createBrowser().handleInput("\u001b");
 
     expect(closes).toBe(2);
+  });
+  it("restores a recorded file selection in its directory", async () => {
+    const root = await createChangedRepository();
+    const selectedFile = join(root, "unchanged.ts");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile);
+
+    await waitForBackgroundWork();
+
+    expect(browser.getBrowsePosition()).toEqual({
+      rootPath: root,
+      directoryPath: root,
+      selectedFilePath: selectedFile,
+    });
+  });
+
+  it("falls back safely when a recorded browse position becomes invalid", async () => {
+    const root = await createChangedRepository();
+    const fallback = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-fallback-"));
+    directories.push(fallback);
+    const directory = join(root, "restored");
+    const selectedFile = join(directory, "selected.ts");
+    await mkdir(directory);
+    await writeFile(selectedFile, "export const selected = true;\n");
+    const position = { rootPath: root, directoryPath: directory, selectedFilePath: selectedFile };
+
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: directory, selectedFilePath: selectedFile });
+    await rm(selectedFile);
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: directory });
+    await rm(directory, { recursive: true });
+    expect(resolveRestoredPosition(fallback, position)).toEqual({ path: fallback });
   });
 
   it("shows the active browser search query", async () => {

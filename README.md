@@ -52,6 +52,7 @@ npm run typecheck
 - `/readfiles` - open the file browser as a floating overlay in the current directory
 - `/readfiles <path>` - open the floating browser rooted at `<path>` (absolute, relative, or `~`-prefixed)
 
+A no-argument reopen during the same Pi session restores the last selected file in its directory, or the last browser directory when no file was selected. This temporary state is never written to disk; an explicit `<path>` starts there instead.
 The overlay is centered at 95% of terminal width with a one-cell margin. Its framed header shows the current browser root and scan activity, and separates the browser from the agent transcript. In browser mode, `q` or `Esc` closes the overlay and returns focus to Pi.
 Diff viewing is built into the file viewer: open a changed tracked file and press `d` to toggle the git diff view.
 

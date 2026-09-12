@@ -9,7 +9,7 @@ import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { statSync } from "node:fs";
 import { homedir } from "node:os";
-import { isAbsolute, join, resolve } from "node:path";
+import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
@@ -35,11 +35,43 @@ function resolveInitialPath(arg: string | undefined, cwd: string): { path: strin
   }
   return { path: absolute };
 }
+export interface BrowsePosition {
+  rootPath: string;
+  directoryPath: string;
+  selectedFilePath: string | null;
+}
+
+function isAccessibleDirectory(path: string): boolean {
+  try {
+    return statSync(path).isDirectory();
+  } catch {
+    return false;
+  }
+}
+
+export function resolveRestoredPosition(defaultPath: string, position: BrowsePosition | null): { path: string; selectedFilePath?: string } {
+  if (!position || !isAccessibleDirectory(position.rootPath)) return { path: defaultPath };
+  const relativeDirectory = relative(position.rootPath, position.directoryPath);
+  if (relativeDirectory === ".." || relativeDirectory.startsWith(`..${sep}`) || !isAccessibleDirectory(position.directoryPath)) {
+    return { path: defaultPath };
+  }
+  if (position.selectedFilePath) {
+    try {
+      if (statSync(position.selectedFilePath).isFile() && dirname(position.selectedFilePath) === position.directoryPath) {
+        return { path: position.directoryPath, selectedFilePath: position.selectedFilePath };
+      }
+    } catch {
+      // The file was removed between close and reopen; restore its directory.
+    }
+  }
+  return { path: position.directoryPath };
+}
+
 
 export default function editorExtension(pi: ExtensionAPI): void {
   const cwd = process.cwd();
   const agentModifiedFiles = new Set<string>();
-
+  let lastBrowsePosition: BrowsePosition | null = null;
   pi.registerCommand("readfiles", {
     description: "Open file browser as a floating overlay (optional: /readfiles <path> to start outside the current directory)",
     handler: async (args, ctx) => {
@@ -49,17 +81,22 @@ export default function editorExtension(pi: ExtensionAPI): void {
         ctx.ui.notify(resolved.error, "error");
         return;
       }
-      const initialPath = resolved.path;
+      const hasExplicitPath = Boolean(args?.trim());
+      const restored = hasExplicitPath ? undefined : resolveRestoredPosition(resolved.path, lastBrowsePosition);
+      const initialPath = restored?.path ?? resolved.path;
+      const initialSelectedPath = restored?.selectedFilePath;
       const { createFileBrowser } = await import("./browser");
 
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {
         let pollInterval: ReturnType<typeof setInterval> | null = null;
+        let captureBrowsePosition: (() => void) | null = null;
 
         const cleanup = () => {
           if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
           }
+          captureBrowsePosition?.();
           done();
         };
 
@@ -82,8 +119,12 @@ export default function editorExtension(pi: ExtensionAPI): void {
           cleanup,
           requestComment,
           requestRender,
-          cwd
+          cwd,
+          initialSelectedPath
         );
+        captureBrowsePosition = () => {
+          lastBrowsePosition = browser.getBrowsePosition();
+        };
 
         pollInterval = setInterval(() => {
           requestRender();
@@ -144,11 +185,12 @@ export default function editorExtension(pi: ExtensionAPI): void {
   });
 
   pi.on("session_start", async () => {
-
     agentModifiedFiles.clear();
+    lastBrowsePosition = null;
   });
 
   pi.on("session_before_switch", () => {
     agentModifiedFiles.clear();
+    lastBrowsePosition = null;
   });
 }
