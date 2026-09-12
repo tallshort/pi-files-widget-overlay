@@ -87,6 +87,7 @@ export function createViewer(
 ): ViewerController {
   const { getRoot, projectCwd, readOnly = false, requestRender } = config;
   let pathCopiedUntil = 0;
+  let copyGeneration = 0;
   const searchInput = createTextInputBuffer();
   const commentInput = createTextInputBuffer({ preserveNewlines: true });
   const commentSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
@@ -622,9 +623,10 @@ export function createViewer(
 
   function copyPath(): void {
     const copiedPath = state.file?.path;
+    const generation = copyGeneration;
     if (!copiedPath) return;
     void copyToClipboard(copiedPath).then(() => {
-      if (state.file?.path !== copiedPath) return;
+      if (generation !== copyGeneration || state.file?.path !== copiedPath) return;
       pathCopiedUntil = Date.now() + 3000;
       requestRender?.();
       setTimeout(() => requestRender?.(), 3000);
@@ -643,6 +645,8 @@ export function createViewer(
     isPathCopied(): boolean { return Date.now() < pathCopiedUntil; },
 
     setFile(file: FileNode): void {
+      pathCopiedUntil = 0;
+      copyGeneration += 1;
       state.file = file;
       state.scroll = 0;
       state.cursor = 0;
@@ -659,10 +663,16 @@ export function createViewer(
     },
 
     updateFileRef(file: FileNode | null): void {
+      if (state.file?.path !== file?.path) {
+        pathCopiedUntil = 0;
+        copyGeneration += 1;
+      }
       state.file = file;
     },
 
     close(): void {
+      pathCopiedUntil = 0;
+      copyGeneration += 1;
       state.file = null;
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       state.rawContent = "";

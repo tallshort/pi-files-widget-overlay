@@ -1004,6 +1004,7 @@ export function createFileBrowser(
   }
 
   function loadRoot(newRoot: string): void {
+    previewViewer.close();
     clearContentSearch();
     rootGeneration += 1;
     treeGeneration += 1;
