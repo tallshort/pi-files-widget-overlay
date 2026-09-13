@@ -4,6 +4,13 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+## [0.6.2] - 2026-09-13
+
+### Fixed
+- Keep confirmed Browser and Viewer search queries visible, explain that `Esc` clears them, and clear retained Browser queries before closing the overlay.
+- Limit Browser changed-file navigation to retained search results and stabilize its asynchronous search and Git-status regression coverage.
+
+
 ## [0.6.1] - 2026-09-12
 
 ### Changed
