@@ -68,6 +68,26 @@ async function addChangedRootFile(root: string): Promise<string> {
   return fileName;
 }
 
+async function withMockedContentSearch<T>(matchesByPattern: Record<string, string>, run: (createBrowser: typeof createFileBrowser) => Promise<T>): Promise<T> {
+  vi.resetModules();
+  vi.doMock("@earendil-works/pi-coding-agent", async importOriginal => {
+    const actual = await importOriginal<typeof import("@earendil-works/pi-coding-agent")>();
+    return {
+      ...actual,
+      createGrepTool: () => ({
+        execute: (_name: string, input: { pattern: string }) => Promise.resolve({ content: [{ type: "text", text: matchesByPattern[input.pattern] ?? "" }] }),
+      }),
+    };
+  });
+  try {
+    const { createFileBrowser: createSearchBrowser } = await import("../src/browser.ts");
+    return await run(createSearchBrowser);
+  } finally {
+    vi.doUnmock("@earendil-works/pi-coding-agent");
+    vi.resetModules();
+  }
+}
+
 async function waitForScanComplete(browser: { getActivityLabel(): string }): Promise<void> {
   await waitFor(() => browser.getActivityLabel() === "");
 }
@@ -861,78 +881,84 @@ describe("file browser expanded changed view", () => {
   });
 
   it("filters files by content with @", async () => {
-    const root = await createChangedRepository();
-    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForScanComplete(browser);
+    await withMockedContentSearch({ "value = 2": "src/nested/changed.ts:1: export const value = 2;" }, async createSearchBrowser => {
+      const root = await createChangedRepository();
+      const browser = createSearchBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+      await waitForScanComplete(browser);
 
-    browser.handleInput("@");
-    for (const character of "value = 2") browser.handleInput(character);
-    browser.handleInput("\r");
-    await waitFor(() => {
+      browser.handleInput("@");
+      for (const character of "value = 2") browser.handleInput(character);
+      browser.handleInput("\r");
+      await waitFor(() => {
+        const rendered = browser.render(100).join("\n");
+        return rendered.includes("changed.ts") && !rendered.includes("unchanged.ts");
+      });
+
       const rendered = browser.render(100).join("\n");
-      return rendered.includes("changed.ts") && !rendered.includes("unchanged.ts");
+      expect(rendered).toContain("changed.ts");
+      expect(rendered).not.toContain("unchanged.ts");
     });
-
-    const rendered = browser.render(100).join("\n");
-    expect(rendered).toContain("changed.ts");
-    expect(rendered).not.toContain("unchanged.ts");
   });
 
   it("keeps the selected content result when confirming search", async () => {
-    const root = await createChangedRepository();
-    const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
-    const browser = createFileBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
-    await waitForScanComplete(browser);
+    await withMockedContentSearch({ true: "src/nested/unchanged.ts:1: export const stable = true;\nunchanged.ts:1: export const stable = true;" }, async createSearchBrowser => {
+      const root = await createChangedRepository();
+      const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
+      const browser = createSearchBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
+      await waitForScanComplete(browser);
 
-    browser.handleInput("@");
-    for (const character of "true") browser.handleInput(character);
-    await waitFor(() => browser.render(100).filter(line => line.includes(".ts")).length >= 2);
-    browser.handleInput("\u001b[B");
-    const selectedBefore = browser.render(100).find(line => line.includes("[selected]"));
-    browser.handleInput("\r");
+      browser.handleInput("@");
+      for (const character of "true") browser.handleInput(character);
+      await waitFor(() => browser.render(100).filter(line => line.includes(".ts")).length >= 2);
+      browser.handleInput("\u001b[B");
+      const selectedBefore = browser.render(100).find(line => line.includes("[selected]"));
+      browser.handleInput("\r");
 
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toBe(selectedBefore);
-    expect(browser.render(100).join("\n")).toContain("@true  (Esc clears)");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toBe(selectedBefore);
+      expect(browser.render(100).join("\n")).toContain("@true  (Esc clears)");
 
-    browser.handleInput("\u001b");
-    expect(browser.render(100).join("\n")).not.toContain("@true  (Esc clears)");
+      browser.handleInput("\u001b");
+      expect(browser.render(100).join("\n")).not.toContain("@true  (Esc clears)");
+    });
   });
   it("scopes changed navigation to confirmed filename and content search results", async () => {
-    const root = await createChangedRepository();
-    const matchOne = join(root, "match-one.ts");
-    const matchTwo = join(root, "match-two.ts");
-    await writeFile(matchOne, "export const matchOne = 'needle';\n");
-    await writeFile(matchTwo, "export const matchTwo = 'needle';\n");
-    await execFile("git", ["add", "--", "match-one.ts", "match-two.ts"], { cwd: root });
-    await execFile("git", ["commit", "-m", "add search navigation fixtures"], { cwd: root });
-    await writeFile(matchOne, "export const matchOne = 'needle changed';\n");
-    await writeFile(matchTwo, "export const matchTwo = 'needle changed';\n");
-    const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
-    const browser = createFileBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
-    await waitForChangedFiles(browser, ["match-one.ts", "match-two.ts"]);
+    await withMockedContentSearch({ needle: "match-one.ts:1: needle\nmatch-two.ts:1: needle" }, async createSearchBrowser => {
+      const root = await createChangedRepository();
+      const matchOne = join(root, "match-one.ts");
+      const matchTwo = join(root, "match-two.ts");
+      await writeFile(matchOne, "export const matchOne = 'needle';\n");
+      await writeFile(matchTwo, "export const matchTwo = 'needle';\n");
+      await execFile("git", ["add", "--", "match-one.ts", "match-two.ts"], { cwd: root });
+      await execFile("git", ["commit", "-m", "add search navigation fixtures"], { cwd: root });
+      await writeFile(matchOne, "export const matchOne = 'needle changed';\n");
+      await writeFile(matchTwo, "export const matchTwo = 'needle changed';\n");
+      const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
+      const browser = createSearchBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
+      await waitForChangedFiles(browser, ["match-one.ts", "match-two.ts"]);
 
-    browser.handleInput("/");
-    browser.handleInput("match");
-    browser.handleInput("\r");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
-    browser.handleInput("[");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
-    browser.handleInput("]");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
+      browser.handleInput("/");
+      browser.handleInput("match");
+      browser.handleInput("\r");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
+      browser.handleInput("[");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
+      browser.handleInput("]");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
 
-    browser.handleInput("\u001b");
-    browser.handleInput("@");
-    for (const character of "needle") browser.handleInput(character);
-    await waitFor(() => {
-      const rendered = browser.render(100).join("\n");
-      return rendered.includes("match-one.ts") && rendered.includes("match-two.ts") && !rendered.includes("changed.ts");
+      browser.handleInput("\u001b");
+      browser.handleInput("@");
+      for (const character of "needle") browser.handleInput(character);
+      await waitFor(() => {
+        const rendered = browser.render(100).join("\n");
+        return rendered.includes("match-one.ts") && rendered.includes("match-two.ts") && !rendered.includes("changed.ts");
+      });
+      browser.handleInput("\r");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
+      browser.handleInput("[");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
+      browser.handleInput("]");
+      expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
     });
-    browser.handleInput("\r");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
-    browser.handleInput("[");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
-    browser.handleInput("]");
-    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
   });
 
   it("leaves the tree unchanged when no retained search result has changes", async () => {
