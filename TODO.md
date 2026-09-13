@@ -52,6 +52,7 @@ This is the backlog for the current floating-overlay implementation, not the his
 - [x] Add a temporary `p` browser shortcut to toggle the wide-terminal 3:7 tree/preview split. The tree uses full width when disabled; narrow-terminal auto-disable behavior remains unchanged and state resets on reopen.
 - [x] Replace truncated keybinding hints with a curated one-line default and temporary `?` toggle for the complete two-line keybinding help in both browser and viewer. Keep view-specific curated keys, reset on reopen, and preserve existing bindings such as `h`.
 - [x] Add opt-in, session-scoped `/readfiles` browse-position memory via the global `piFilesWidgetOverlay.restoreBrowsePosition` setting: on close, retain the current root, directory, and selected file only in extension memory; on reopen, restore the recorded directory or the selected file's parent directory and selection. Do not persist to disk or restore scrolling/cursor state. Fall back to the recorded directory when only its file is unavailable, then to the requested/default root when the recorded root or directory is unavailable; handle a future different multi-root gracefully.
+- [ ] Add optional inline image previews for supported terminal protocols using Pi `>=0.84.4`: detect supported image MIME types, enforce conservative dimensions/size limits, and retain the current safe metadata placeholder for unsupported terminals, oversized files, unknown formats, and errors. Cover capability and fallback behavior.
 
 ### Design evaluation (not scheduled)
 
