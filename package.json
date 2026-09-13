@@ -14,8 +14,8 @@
   "bugs": "https://github.com/tallshort/pi-files-widget-overlay/issues",
   "homepage": "https://github.com/tallshort/pi-files-widget-overlay#readme",
   "peerDependencies": {
-    "@earendil-works/pi-coding-agent": "*",
-    "@earendil-works/pi-tui": "*"
+    "@earendil-works/pi-coding-agent": ">=0.84.4",
+    "@earendil-works/pi-tui": ">=0.84.4"
   },
   "scripts": {
     "typecheck": "tsc --noEmit",
@@ -29,9 +29,9 @@
     "image": "https://raw.githubusercontent.com/tallshort/pi-files-widget-overlay/main/gallery-preview.png"
   },
   "devDependencies": {
-    "@earendil-works/pi-coding-agent": "^0.80.3",
+    "@earendil-works/pi-coding-agent": "^0.84.4",
     "@types/node": "^22.0.0",
-    "@earendil-works/pi-tui": "^0.80.3",
+    "@earendil-works/pi-tui": "^0.84.4",
     "typescript": "^5.7.3",
     "vitest": "^3.0.0"
   }

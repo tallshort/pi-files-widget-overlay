@@ -4,6 +4,9 @@ All notable changes to this extension will be documented in this file.
 
 ## [Unreleased]
 
+### Changed
+- Require Pi and Pi TUI `>=0.84.4`; resolve browse-position settings through Pi's configured agent directory and use current extension-context paths when opening or tracking files.
+
 ## [0.6.2] - 2026-09-13
 
 ### Fixed

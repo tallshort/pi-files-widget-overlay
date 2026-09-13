@@ -32,7 +32,7 @@ For local development, add the repository directory to `~/.pi/agent/settings.jso
 
 ## Dependencies
 
-- Pi
+- Pi `>=0.84.4`
 - `git` for Git status and diff mode when available
 
 The extension has no `bat`, `glow`, or `delta` runtime dependency. It uses Pi's theme-aware syntax highlighter and Markdown renderer.
@@ -102,7 +102,7 @@ In selection mode, `j` / `k` or `↑` / `↓`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl
 
 ## Configuration
 
-Browse-position restoration is disabled by default. To restore the last selected file or browser directory when reopening `/readfiles` without a path in the same Pi session, add this namespace to `~/.pi/agent/settings.json`:
+Browse-position restoration is disabled by default. To restore the last selected file or browser directory when reopening `/readfiles` without a path in the same Pi session, add this namespace to Pi's global settings file (`$PI_CODING_AGENT_DIR/settings.json`, defaulting to `~/.pi/agent/settings.json`):
 
 ```json
 {

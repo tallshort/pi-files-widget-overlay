@@ -5,7 +5,7 @@
  * Use /readfiles to open the file browser, navigate with j/k, Enter to view.
  */
 
-import type { ExtensionAPI } from "@earendil-works/pi-coding-agent";
+import { getAgentDir, isEditToolResult, isWriteToolResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
@@ -16,9 +16,12 @@ import { formatCommentMessage } from "./comment";
 import { getObservedToolActivityPath } from "./activity";
 import { sanitizeTerminalLabel } from "./utils";
 
+export function getRestoreBrowsePositionSettingsPath(agentDirectory = getAgentDir()): string {
+  return join(agentDirectory, "settings.json");
+}
 
 /** Read-only opt-in: malformed, absent, or non-boolean settings stay disabled. */
-export function readRestoreBrowsePositionSetting(settingsPath = join(homedir(), ".pi", "agent", "settings.json")): boolean {
+export function readRestoreBrowsePositionSetting(settingsPath = getRestoreBrowsePositionSettingsPath()): boolean {
   try {
     const settings: unknown = JSON.parse(readFileSync(settingsPath, "utf-8"));
     if (!settings || typeof settings !== "object") return false;
@@ -112,7 +115,6 @@ function truncatePathTail(path: string, width: number): string {
 
 
 export default function editorExtension(pi: ExtensionAPI): void {
-  const cwd = process.cwd();
   const agentModifiedFiles = new Set<string>();
   const restoreBrowsePosition = readRestoreBrowsePositionSetting();
   let lastBrowsePosition: BrowsePosition | null = null;
@@ -120,6 +122,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
     description: "Open file browser as a floating overlay (optional: /readfiles <path> to start outside the current directory)",
     handler: async (args, ctx) => {
 
+      const cwd = ctx.cwd;
       const resolved = resolveInitialPath(args, cwd);
       if (resolved.error) {
         ctx.ui.notify(sanitizeTerminalLabel(resolved.error), "error");
@@ -234,8 +237,12 @@ export default function editorExtension(pi: ExtensionAPI): void {
     },
   });
 
-  pi.on("tool_result", async (event) => {
-    const filePath = getObservedToolActivityPath(event.toolName, event.input, cwd);
+  pi.on("tool_result", async (event, ctx) => {
+    const filePath = isWriteToolResult(event)
+      ? getObservedToolActivityPath("write", event.input, ctx.cwd)
+      : isEditToolResult(event)
+        ? getObservedToolActivityPath("edit", event.input, ctx.cwd)
+        : undefined;
     if (filePath) agentModifiedFiles.add(filePath);
   });
 

@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { getOverlayPathWidths, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
+import { getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -310,6 +310,10 @@ describe("file browser expanded changed view", () => {
 
     await waitFor(() => browser.getBrowsePosition().directoryPath === emptyDirectory);
     expect(browser.getRestorePath()).toBe("empty");
+  });
+
+  it("derives browse-position settings from Pi's configured agent directory", () => {
+    expect(getRestoreBrowsePositionSettingsPath("/custom/pi-agent")).toBe("/custom/pi-agent/settings.json");
   });
 
   it("reads browse-position restoration only from the explicit global opt-in", async () => {
