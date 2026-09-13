@@ -73,7 +73,7 @@ npm run typecheck
 | `?` | Show/hide the complete browser help. |
 | `q` / `Esc` | Close the overlay. |
 
-While either search is active, type to search and use `↑` / `↓` to move. `Enter` keeps the query; `Esc` always cancels it; `Backspace` deletes input and cancels when the query is empty. Press the active search key again to clear the query.
+While either search is active, type to search and use `↑` / `↓` to move. `Enter` keeps the query and returns to the normal browser help; its header displays the query as `/foo (Esc clears)`. `Esc` cancels the active search; `Backspace` deletes input and cancels when the query is empty. After confirming a browser query, `Esc` clears the retained query before a second `Esc` closes the overlay. Press the active search key again to clear the query.
 
 ## Viewer keybindings
 
@@ -96,7 +96,7 @@ While either search is active, type to search and use `↑` / `↓` to move. `En
 | `?` | Show/hide the complete viewer help. |
 | `q`, `Esc`, or `←` | Return to the browser when not searching, selecting, or editing a comment. |
 
-In search mode, type to search and press `Enter` to keep the query. `Esc` or `←` exits search; `Backspace` deletes input and exits only when the query is empty; pressing `/` again clears the query. With a kept query, `Esc` or `←` clears that query before returning to the browser.
+In search mode, type to search and press `Enter` to keep the query; its header displays `/foo (Esc clears)` and the match position. `Esc` or `←` exits active search; `Backspace` deletes input and exits only when the query is empty; pressing `/` again clears the query. With a kept query, `Esc` or `←` clears that query; a subsequent `Esc` or `←` returns to the browser.
 
 In selection mode, `j` / `k` or `↑` / `↓`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl-D`, and `g` / `G` extend or reset the selection; `Esc`, `←`, or `v` cancels it. `c` opens the line-comment editor and `C` opens the file-comment editor. In the comment editor, `Enter` or `Shift+Enter` adds a line, `←` / `→` moves the cursor, `Backspace` deletes, `Ctrl+Enter`, `Ctrl+D`, or supported `Alt+Enter` sends the comment, and `Esc` cancels.
 

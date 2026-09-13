@@ -1241,12 +1241,15 @@ export function createFileBrowser(
     const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
     const errors = [browser.errorMessage, browser.contentSearchError, ...gitErrors].filter((message): message is string => Boolean(message));
     const errorIndicator = errors.length > 0 ? theme.fg("error", ` [${errors.join("; ")}]`) : "";
+    const searchPrefix = browser.searchKind === "content" ? "@" : "/";
     const searchIndicator = browser.searchMode
-      ? theme.fg("accent", `  ${browser.searchKind === "content" ? "@" : "/"}${sanitizeTerminalLabel(browser.searchQuery)}${CURSOR_MARKER}█`)
-      : "";
+      ? theme.fg("accent", `  ${searchPrefix}${sanitizeTerminalLabel(browser.searchQuery)}${CURSOR_MARKER}█`)
+      : browser.searchQuery
+        ? theme.fg("dim", `  ${searchPrefix}${sanitizeTerminalLabel(browser.searchQuery)}  (Esc clears)`)
+        : "";
 
-    const header = browser.searchMode
-      ? theme.bold(theme.fg("text", searchIndicator))
+    const header = browser.searchMode || browser.searchQuery
+      ? theme.bold(theme.fg("text", searchIndicator)) + errorIndicator
       : branchDisplay + statsDisplay + partialIndicator + errorIndicator;
     lines.push(truncateToWidth(header, width));
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
@@ -1359,6 +1362,10 @@ export function createFileBrowser(
         browser.searchQuery = "";
         clearContentSearch();
         textInput.reset();
+      } else if (browser.searchQuery) {
+        browser.searchQuery = "";
+        browser.selectedIndex = 0;
+        clearContentSearch();
       } else {
         textInput.reset();
         stopBackgroundTasks();

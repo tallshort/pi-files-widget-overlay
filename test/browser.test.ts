@@ -420,6 +420,25 @@ describe("file browser expanded changed view", () => {
     expect(browser.getRestorePath()).toBeNull();
   });
 
+  it("shows a confirmed browser search and clears it before closing on Escape", async () => {
+    const root = await createChangedRepository();
+    let closes = 0;
+    const browser = createFileBrowser(root, new Set(), theme, () => { closes += 1; }, () => {}, () => {});
+
+    browser.handleInput("/");
+    browser.handleInput("changed");
+    browser.handleInput("\r");
+
+    expect(browser.render(100).join("\n")).toContain("/changed  (Esc clears)");
+
+    browser.handleInput("\u001b");
+    expect(closes).toBe(0);
+    expect(browser.render(100).join("\n")).not.toContain("/changed");
+
+    browser.handleInput("\u001b");
+    expect(closes).toBe(1);
+  });
+
   it("shows the active browser search query", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
@@ -436,7 +455,6 @@ describe("file browser expanded changed view", () => {
     expect(cleared).not.toContain("/changed");
     expect(cleared).toContain(`/${CURSOR_MARKER}█`);
   });
-
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

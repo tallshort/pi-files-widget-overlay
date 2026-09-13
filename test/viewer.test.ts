@@ -90,7 +90,7 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("needle");
     expect(viewer.render(80)[0]).toContain(CURSOR_MARKER);
     viewer.handleInput("\r");
-    expect(viewer.render(80)[0]).toContain("[1/2]");
+    expect(viewer.render(80)[0]).toContain("/needle  (Esc clears) [1/2]");
     viewer.handleInput("n");
     expect(viewer.render(80)[0]).toContain("[2/2]");
     viewer.handleInput("y");
