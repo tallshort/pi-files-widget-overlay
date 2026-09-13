@@ -58,6 +58,16 @@ async function createNestedRepository(): Promise<string> {
   return directory;
 }
 
+async function addChangedRootFile(root: string): Promise<string> {
+  const fileName = "root-changed.ts";
+  const filePath = join(root, fileName);
+  await writeFile(filePath, "export const version = 1;\n");
+  await execFile("git", ["add", "--", fileName], { cwd: root });
+  await execFile("git", ["commit", "-m", "add root change fixture"], { cwd: root });
+  await writeFile(filePath, "export const version = 2;\n");
+  return fileName;
+}
+
 async function waitForScanComplete(browser: { getActivityLabel(): string }): Promise<void> {
   await waitFor(() => browser.getActivityLabel() === "");
 }
@@ -913,41 +923,62 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("\u001b");
     browser.handleInput("@");
     for (const character of "needle") browser.handleInput(character);
-    await waitFor(() => browser.render(100).join("\n").includes("match-one.ts") && browser.render(100).join("\n").includes("match-two.ts"));
+    await waitFor(() => {
+      const rendered = browser.render(100).join("\n");
+      return rendered.includes("match-one.ts") && rendered.includes("match-two.ts") && !rendered.includes("changed.ts");
+    });
     browser.handleInput("\r");
     expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
-    browser.handleInput("]");
+    browser.handleInput("[");
     expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
+    browser.handleInput("]");
+    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
   });
 
   it("leaves the tree unchanged when no retained search result has changes", async () => {
     const root = await createChangedRepository();
+    const changedFile = await addChangedRootFile(root);
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForScanComplete(browser);
-    const before = browser.render(100).join("\n");
+    await waitForChangedFiles(browser, [changedFile]);
+    const before = browser.render(79).join("\n");
 
     browser.handleInput("/");
     browser.handleInput("unchanged");
     browser.handleInput("\r");
+    const retained = browser.render(79).join("\n");
+    const position = browser.getBrowsePosition();
     browser.handleInput("[");
+    expect(browser.render(79).join("\n")).toBe(retained);
+    expect(browser.getBrowsePosition()).toEqual(position);
+    browser.handleInput("]");
+    expect(browser.render(79).join("\n")).toBe(retained);
+    expect(browser.getBrowsePosition()).toEqual(position);
     browser.handleInput("\u001b");
 
-    expect(browser.render(100).join("\n")).toBe(before);
+    expect(browser.render(79).join("\n")).toBe(before);
   });
 
   it("applies c and C within retained search results", async () => {
     const root = await createChangedRepository();
-    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForScanComplete(browser);
+    const changedFile = await addChangedRootFile(root);
+    const cBrowser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    const expandedBrowser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await Promise.all([
+      waitForChangedFiles(cBrowser, [changedFile]),
+      waitForChangedFiles(expandedBrowser, [changedFile]),
+    ]);
 
-    browser.handleInput("/");
-    browser.handleInput("unchanged");
-    browser.handleInput("\r");
-    browser.handleInput("c");
-    expect(browser.render(79).join("\n")).toContain("no files matching 'unchanged'");
+    cBrowser.handleInput("/");
+    cBrowser.handleInput("unchanged");
+    cBrowser.handleInput("\r");
+    cBrowser.handleInput("c");
+    expect(cBrowser.render(79).join("\n")).toContain("no files matching 'unchanged'");
 
-    browser.handleInput("C");
-    expect(browser.render(79).join("\n")).toContain("no files matching 'unchanged'");
+    expandedBrowser.handleInput("/");
+    expandedBrowser.handleInput("unchanged");
+    expandedBrowser.handleInput("\r");
+    expandedBrowser.handleInput("C");
+    expect(expandedBrowser.render(79).join("\n")).toContain("no files matching 'unchanged'");
   });
 
   it("shares changed-only state between c and C", async () => {
