@@ -873,6 +873,10 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("\r");
 
     expect(browser.render(100).find(line => line.includes("[selected]"))).toBe(selectedBefore);
+    expect(browser.render(100).join("\n")).toContain("@true  (Esc clears)");
+
+    browser.handleInput("\u001b");
+    expect(browser.render(100).join("\n")).not.toContain("@true  (Esc clears)");
   });
   it("shares changed-only state between c and C", async () => {
     const root = await createChangedRepository();

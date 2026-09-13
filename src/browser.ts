@@ -1249,7 +1249,7 @@ export function createFileBrowser(
         : "";
 
     const header = browser.searchMode || browser.searchQuery
-      ? theme.bold(theme.fg("text", searchIndicator)) + errorIndicator
+      ? errorIndicator + theme.bold(theme.fg("text", searchIndicator))
       : branchDisplay + statsDisplay + partialIndicator + errorIndicator;
     lines.push(truncateToWidth(header, width));
     lines.push(theme.fg("borderMuted", "─".repeat(width)));

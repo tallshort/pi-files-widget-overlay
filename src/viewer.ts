@@ -540,8 +540,11 @@ export function createViewer(
 
     if (state.mode === "search") {
       header += theme.fg("accent", `  /${state.searchQuery}${CURSOR_MARKER}█`);
-    } else if (state.searchQuery && state.searchMatches.length > 0) {
-      header += theme.fg("dim", `  /${state.searchQuery}  (Esc clears) [${state.searchIndex + 1}/${state.searchMatches.length}]`);
+    } else if (state.searchQuery) {
+      const searchPosition = state.searchMatches.length > 0
+        ? `${state.searchIndex + 1}/${state.searchMatches.length}`
+        : "0/0";
+      header += theme.fg("dim", `  /${state.searchQuery}  (Esc clears) [${searchPosition}]`);
     }
 
     return truncateToWidth(header, width);

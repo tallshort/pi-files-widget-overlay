@@ -120,6 +120,14 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("/");
     viewer.handleInput("\u007f");
     expect(viewer.render(80)[0]).not.toContain(CURSOR_MARKER);
+
+    viewer.handleInput("/");
+    viewer.handleInput("missing");
+    viewer.handleInput("\r");
+    expect(viewer.render(80)[0]).toContain("/missing  (Esc clears) [0/0]");
+    expect(viewer.handleInput("\u001b")).toEqual({ type: "none" });
+    expect(viewer.render(80)[0]).not.toContain("/missing");
+    expect(viewer.handleInput("\u001b")).toEqual({ type: "close" });
   });
 
   it("keeps expanded help within the overlay height after growing the viewer", async () => {
