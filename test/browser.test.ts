@@ -5,7 +5,7 @@ import { join } from "node:path";
 import { promisify } from "node:util";
 
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, getAgentDir, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
@@ -314,6 +314,7 @@ describe("file browser expanded changed view", () => {
 
   it("derives browse-position settings from Pi's configured agent directory", () => {
     expect(getRestoreBrowsePositionSettingsPath("/custom/pi-agent")).toBe("/custom/pi-agent/settings.json");
+    expect(getRestoreBrowsePositionSettingsPath()).toBe(join(getAgentDir(), "settings.json"));
   });
 
   it("reads browse-position restoration only from the explicit global opt-in", async () => {

@@ -20,7 +20,7 @@ Install from npm with Pi's package manager:
 pi install npm:pi-files-widget-overlay
 ```
 
-For local development, add the repository directory to `~/.pi/agent/settings.json`:
+For local development, add the repository directory to Pi's global settings file (`$PI_CODING_AGENT_DIR/settings.json`, defaulting to `~/.pi/agent/settings.json`):
 
 ```json
 {
