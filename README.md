@@ -62,8 +62,8 @@ npm run typecheck
 | `PgUp` / `PgDn` | Page through the tree in the single-column layout. |
 | `p` | Toggle the tree/preview split on wide terminals. |
 | `y` | Copy the selected file or directory's absolute path. |
-| `c` | Toggle changed-only view. |
-| `C` | Toggle expanded changed view. |
+| `c` | Toggle changed-only view within the current search results. |
+| `C` | Toggle expanded changed view within the current search results. |
 | `[` / `]` | Previous/next changed file; when searching, stay within the current results. |
 | `/` | Search file names. |
 | `@` | Search literal file content asynchronously. |
