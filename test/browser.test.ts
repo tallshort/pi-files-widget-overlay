@@ -58,8 +58,8 @@ async function createNestedRepository(): Promise<string> {
   return directory;
 }
 
-function waitForBackgroundWork(): Promise<void> {
-  return new Promise(resolve => setTimeout(resolve, 75));
+async function waitForBrowserReady(browser: { getActivityLabel(): string }): Promise<void> {
+  await waitFor(() => browser.getActivityLabel() === "");
 }
 
 async function waitFor(condition: () => boolean, timeoutMs = 2_000): Promise<void> {
@@ -92,7 +92,7 @@ describe("file browser expanded changed view", () => {
   it("toggles the expanded changed view with C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     browser.handleInput("C");
     const rendered = browser.render(100).join("\n");
 
@@ -105,10 +105,11 @@ describe("file browser expanded changed view", () => {
   it("copies the selected directory path", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     browser.handleInput("y");
-    await Promise.resolve();
+    await waitFor(() => vi.mocked(copyToClipboard).mock.calls.length > 0);
+    await waitFor(() => browser.isPathCopied());
     expect(copyToClipboard).toHaveBeenCalledWith(browser.getBrowsePosition().directoryPath);
     expect(browser.isPathCopied()).toBe(true);
   });
@@ -116,7 +117,7 @@ describe("file browser expanded changed view", () => {
   it("shows the path-copy shortcut in the default browser help", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     const help = browser.render(160).at(-1) ?? "";
     expect(help).toContain("y: copy path");
@@ -125,7 +126,7 @@ describe("file browser expanded changed view", () => {
   it("keeps top-level directories with only deep tracked paths", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     expect(browser.render(100).join("\n")).toContain("deep");
   });
 
@@ -141,7 +142,7 @@ describe("file browser expanded changed view", () => {
       bold: (text: string) => text,
     } as unknown as Theme;
     const browser = createFileBrowser(root, new Set(), visualTheme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     const selected = browser.render(60).find(line => line.includes("<selectedBg>")) ?? "";
     expect(selected.replace(/<\/?selectedBg>/g, "")).toHaveLength(60);
     expect(colors).toContain("text");
@@ -157,7 +158,7 @@ describe("file browser expanded changed view", () => {
   it("uses stable labels for background activity", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     const rendered = browser.render(100).join("\n");
     expect(browser.getActivityLabel()).toBe("");
     expect(rendered).not.toMatch(/[⠋⠙⠹⠸⠼⠴⠦⠧⠇⠏]/);
@@ -166,7 +167,7 @@ describe("file browser expanded changed view", () => {
   it("marks files modified by the current agent session with a robot", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set([join(root, "unchanged.ts")]), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     expect(browser.render(100).join("\n")).toContain("🤖");
   });
 
@@ -202,7 +203,7 @@ describe("file browser expanded changed view", () => {
     const selectedFile = join(root, "unchanged.ts");
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile);
 
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     expect(browser.getBrowsePosition()).toEqual({
       rootPath: root,
@@ -232,7 +233,7 @@ describe("file browser expanded changed view", () => {
       await waitFor(() => browser.getBrowsePosition().selectedFilePath === selectedFile);
       browser.handleInput("\r");
       await waitFor(() => browser.render(100).join("\n").includes("export const value = 2"));
-      await waitForBackgroundWork();
+      await waitForBrowserReady(browser);
 
       expect(browser.getBrowsePosition().selectedFilePath).toBe(selectedFile);
       expect(browser.render(100).join("\n")).toContain("export const value = 2");
@@ -354,7 +355,7 @@ describe("file browser expanded changed view", () => {
         const rendered = browser.render(100).join("\n");
         return rendered.includes("unchanged.ts") && rendered.includes("changed.ts");
       });
-      await waitForBackgroundWork();
+      await waitForBrowserReady(browser);
       browser.handleInput("C");
       await waitFor(() => {
         const rendered = browser.render(100).join("\n");
@@ -382,7 +383,7 @@ describe("file browser expanded changed view", () => {
     const selectedFile = join(directory, "changed.ts");
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, selectedFile, directory);
 
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     expect(browser.getBrowsePosition()).toEqual({ rootPath: root, directoryPath: directory, selectedFilePath: selectedFile });
     expect(browser.getRestorePath()).toBe("src/nested");
@@ -458,7 +459,7 @@ describe("file browser expanded changed view", () => {
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     const wide = browser.render(100);
     expect(wide.join("\n")).toContain("Directory selected - expand it in the file tree instead of opening it.");
     expect(wide.some(line => line.includes("│"))).toBe(true);
@@ -500,7 +501,7 @@ describe("file browser expanded changed view", () => {
     try {
       const root = await createChangedRepository();
       const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-      await waitForBackgroundWork();
+      await waitForBrowserReady(browser);
       browser.render(100);
       browser.handleInput("?");
       for (let i = 0; i < 10; i++) browser.handleInput("=");
@@ -514,7 +515,7 @@ describe("file browser expanded changed view", () => {
   it("shows hidden project files while keeping .git internal", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     const rendered = browser.render(100).join("\n");
 
     expect(rendered).toContain(".pi");
@@ -607,7 +608,7 @@ describe("file browser expanded changed view", () => {
 
     browser.handleInput("u");
     await rm(oldRoot, { recursive: true, force: true });
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     const rendered = browser.render(100).join("\n");
     expect(rendered).toContain("fresh.ts");
@@ -620,17 +621,17 @@ describe("file browser expanded changed view", () => {
     await symlink(".", join(root, "loop"), "dir");
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
 
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     expect(browser.render(100).join("\n")).toContain("loop");
     browser.handleInput("l");
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     expect(browser.render(100).join("\n")).toContain("loop");
   });
 
   it("enters first children with right input and collapses parents with left input", async () => {
     const root = await createNestedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     browser.handleInput("l");
     browser.handleInput("l");
     browser.handleInput("h");
@@ -643,12 +644,12 @@ describe("file browser expanded changed view", () => {
   it("keeps only the latest asynchronous Git re-root result", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(join(root, "src", "nested"), new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     browser.handleInput("u");
     browser.handleInput("u");
     expect(browser.render(100).join("\n")).toContain("(loading...)");
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     const rendered = browser.render(100).join("\n");
     expect(browser.getRootPath()).toBe(root);
@@ -844,7 +845,7 @@ describe("file browser expanded changed view", () => {
   it("filters files by content with @", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     browser.handleInput("@");
     for (const character of "value = 2") browser.handleInput(character);
@@ -863,7 +864,7 @@ describe("file browser expanded changed view", () => {
     const root = await createChangedRepository();
     const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
     const browser = createFileBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
 
     browser.handleInput("@");
     for (const character of "true") browser.handleInput(character);
@@ -878,10 +879,27 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("\u001b");
     expect(browser.render(100).join("\n")).not.toContain("@true  (Esc clears)");
   });
+  it("scopes changed navigation to confirmed search results", async () => {
+    const root = await createChangedRepository();
+    await writeFile(join(root, "match-one.ts"), "export const matchOne = true;\n");
+    await writeFile(join(root, "match-two.ts"), "export const matchTwo = true;\n");
+    const selectedTheme = { ...theme, bg: (_color: string, text: string) => `[selected]${text}` } as unknown as Theme;
+    const browser = createFileBrowser(root, new Set(), selectedTheme, () => {}, () => {}, () => {});
+    await waitFor(() => browser.render(100).join("\n").includes("match-one.ts") && browser.render(100).join("\n").includes("match-two.ts"));
+
+    browser.handleInput("/");
+    browser.handleInput("match");
+    browser.handleInput("\r");
+    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-one.ts");
+
+    browser.handleInput("[");
+    expect(browser.render(100).find(line => line.includes("[selected]"))).toContain("match-two.ts");
+  });
+
   it("shares changed-only state between c and C", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitForBackgroundWork();
+    await waitForBrowserReady(browser);
     browser.handleInput("c");
     expect(browser.render(100).join("\n")).not.toContain("unchanged.ts");
 

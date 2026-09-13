@@ -64,7 +64,7 @@ npm run typecheck
 | `y` | Copy the selected file or directory's absolute path. |
 | `c` | Toggle changed-only view. |
 | `C` | Toggle expanded changed view. |
-| `[` / `]` | Previous/next changed file. |
+| `[` / `]` | Previous/next changed file; when searching, stay within the current results. |
 | `/` | Search file names. |
 | `@` | Search literal file content asynchronously. |
 | `u` | Re-root at the parent directory. |

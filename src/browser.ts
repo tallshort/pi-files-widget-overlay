@@ -1132,10 +1132,14 @@ export function createFileBrowser(
   function navigateToChange(direction: 1 | -1): void {
     if (!browser.root) return;
 
-    const changedFiles = collectChangedFiles(browser.root);
+    const displayList = getDisplayList();
+    const allChangedFiles = collectChangedFiles(browser.root);
+    const visiblePaths = new Set(displayList.map(item => item.node.path));
+    const changedFiles = browser.searchQuery
+      ? allChangedFiles.filter(change => visiblePaths.has(change.file.path))
+      : allChangedFiles;
     if (changedFiles.length === 0) return;
 
-    const displayList = getDisplayList();
     const currentNode = displayList[browser.selectedIndex]?.node;
 
     let currentIdx = -1;
