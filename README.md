@@ -129,7 +129,7 @@ Multi-root browsing is designed but not implemented yet. When it is implemented,
 }
 ```
 
-Configured paths will resolve relative to the command's `ctx.cwd`; the command root remains first, and malformed or inaccessible configured roots will not prevent normal single-root browsing.
+Configured paths will resolve relative to the command's `ctx.cwd`; the command root remains first, and malformed or inaccessible configured roots will not prevent normal single-root browsing. In planned multi-root mode, root selection and per-root locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
 
 ## Notes and edge cases
 
