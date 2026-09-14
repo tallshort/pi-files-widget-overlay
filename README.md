@@ -114,6 +114,23 @@ Browse-position restoration is disabled by default. To restore the last selected
 
 The extension reads this setting but never writes it. An explicit `/readfiles <path>` always starts at that path. Restored state is memory-only, preserves the original browser root used by `.`, and is shown briefly in the header until the next input.
 
+### Planned multi-root setting
+
+Multi-root browsing is designed but not implemented yet. When it is implemented, its optional roots will use the same **global** settings file and namespace—not project `.pi/settings.json`—so their behavior remains unambiguous when `/readfiles <path>` opens a directory outside `ctx.cwd`:
+
+```json
+{
+  "piFilesWidgetOverlay": {
+    "roots": [
+      { "path": "../service-api", "label": "API" },
+      { "path": "~/work/shared-lib", "label": "Shared" }
+    ]
+  }
+}
+```
+
+Configured paths will resolve relative to the command's `ctx.cwd`; the command root remains first, and malformed or inaccessible configured roots will not prevent normal single-root browsing.
+
 ## Notes and edge cases
 
 - The overlay is centered at 95% of terminal width with a one-cell margin. Its maximum height is 95% of the terminal; panels start at 85% and `+` / `-` adjust within that limit.

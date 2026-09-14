@@ -94,7 +94,7 @@ type RootAnchor = {
 };
 ```
 
-The command root remains the first anchor: `/readfiles` uses `ctx.cwd`, and `/readfiles <path>` uses its existing single-path resolution. Optional, project-defined anchors come from the trusted project's `.pi/settings.json`:
+The command root remains the first anchor: `/readfiles` uses `ctx.cwd`, and `/readfiles <path>` uses its existing single-path resolution. Optional anchors are read only from Pi's global `$PI_CODING_AGENT_DIR/settings.json`, under the existing `piFilesWidgetOverlay` namespace; project `.pi/settings.json` is deliberately not consulted. This preserves the extension's current configuration convention even when an explicit path points outside `ctx.cwd`:
 
 ```json
 {
@@ -107,7 +107,7 @@ The command root remains the first anchor: `/readfiles` uses `ctx.cwd`, and `/re
 }
 ```
 
-Configured paths resolve relative to `ctx.cwd`, support the existing `~` behavior, are normalized and deduplicated, and never displace the command root. A missing or malformed setting is ignored. This preserves the existing interpretation of a command argument as one path, including paths containing spaces.
+Configured paths resolve relative to the command's `ctx.cwd`, support the existing `~` behavior, are normalized and deduplicated, and never displace the command root. The same global roots are therefore available for every project; a missing or malformed setting is ignored. This preserves the existing interpretation of a command argument as one path, including paths containing spaces.
 
 ### Interaction and state
 
