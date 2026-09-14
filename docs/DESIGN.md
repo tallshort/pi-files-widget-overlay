@@ -77,3 +77,44 @@ This replaces the upstream use of `bat`, `glow`, and `delta`, avoiding tool-spec
 - Keep terminal rendering width-safe by truncating borders and wrapping content with ANSI-aware helpers.
 - Never let a background scan from an old root modify a newly re-rooted browser.
 - Degrade gracefully when Git metadata or a filesystem operation is unavailable.
+
+## Evaluated future design: multi-root browsing
+
+This is a design decision only; implementation is not scheduled. Pi exposes one `ctx.cwd`, not a workspace-root list, so `/readfiles` must not infer roots from Git worktrees, parent directories, or sibling repositories.
+
+### Root model
+
+A future multi-root overlay has a small root-anchor interface:
+
+```ts
+type RootAnchor = {
+  id: string;    // normalized absolute path
+  path: string;
+  label: string;
+};
+```
+
+The command root remains the first anchor: `/readfiles` uses `ctx.cwd`, and `/readfiles <path>` uses its existing single-path resolution. Optional, project-defined anchors come from the trusted project's `.pi/settings.json`:
+
+```json
+{
+  "piFilesWidgetOverlay": {
+    "roots": [
+      { "path": "../service-api", "label": "API" },
+      { "path": "~/work/shared-lib", "label": "Shared" }
+    ]
+  }
+}
+```
+
+Configured paths resolve relative to `ctx.cwd`, support the existing `~` behavior, are normalized and deduplicated, and never displace the command root. A missing or malformed setting is ignored. This preserves the existing interpretation of a command argument as one path, including paths containing spaces.
+
+### Interaction and state
+
+In normal browser mode, `Tab` opens an in-overlay root picker rather than immediately cycling roots; `↑`/`↓` select, `Enter` confirms, and `Esc` cancels. The picker marks inaccessible roots without changing the active root. A single-root overlay leaves `Tab` as a no-op. The header adds a compact anchor badge only in multi-root mode, for example `Files — [API 2/3] /workspace/service-api`.
+
+A root anchor differs from the current browsing root. `u` may still temporarily re-root to a parent directory, while `.` returns to the active anchor. Each anchor retains its directory and selected file only for the current overlay; switching back restores those locations but not viewer, scrolling, diff, selection, search, filtering, or expansion state. The selected anchor is not persisted across overlay invocations. Existing single-root `restoreBrowsePosition` behavior remains unchanged.
+
+`browser.ts` is the seam for root switching: it already owns root-local tree, Git, scan, grep, viewer, and generation state. A future `switchRoot()` must validate the target before changing state, capture the departing anchor's location, close viewer and preview, clear root-local UI state, increment generations, then load the new provisional tree. Background filesystem, LOC, Git, and grep work must verify both generation and active root before changing state. Current-session observed tool activity remains shared because it uses absolute paths.
+
+The first implementation must not create a virtual merged tree, cross-root search or changed-file navigation, multi-repository Git aggregation, multi-path command syntax, automatic root discovery, or persistent active-root state.

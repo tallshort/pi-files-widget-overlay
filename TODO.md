@@ -56,6 +56,6 @@ This is the backlog for the current floating-overlay implementation, not the his
 
 ### Design evaluation (not scheduled)
 
-- [ ] Evaluate multi-root `/readfiles` support before implementation: decide how roots are defined (arguments, config, or runtime), whether `Tab` cycles or opens a picker, header/position presentation, and missing-root/root-switch reset behavior. Preserve single-root compatibility and keep the selected root temporary.
+- [x] Evaluate multi-root `/readfiles` support before implementation. The decided model is configuration-defined, temporary root anchors; preserve single-root command semantics, use an in-overlay `Tab` picker, keep each root's location only for the active overlay, and reset root-local async/UI state on switching. See `docs/DESIGN.md`.
 - [x] Add an `@` content filter alongside filename `/` search, using cached SDK `createGrepTool` with bounded, context-free asynchronous results and cancellation. By design it filters files only; use Viewer `/` to locate individual matches.
 - [x] Add a `y` shortcut to copy the selected Browser file or directory and current Viewer file absolute path. Show a dim `Path copied` transient hint in the relevant title area, auto-dismiss it after a few seconds, and add no dependencies.
