@@ -475,7 +475,10 @@ export function createFileBrowser(
   function scanPendingRestorePath(): void {
     if (!pendingRestorePath || browser.scanState.mode !== "safe" || !browser.root) return;
     const target = relative(rootPath, pendingRestorePath);
-    if (!target || target === ".." || target.startsWith(`..${sep}`) || resolve(rootPath, target) !== pendingRestorePath) return;
+    if (!target || target === ".." || target.startsWith(`..${sep}`) || resolve(rootPath, target) !== pendingRestorePath) {
+      if (pendingRestorePath === restoredDirectoryPath) pendingRestorePath = null;
+      return;
+    }
 
     const parts = target.split(sep).filter(Boolean);
     let current = browser.root;
@@ -489,6 +492,8 @@ export function createFileBrowser(
         if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
           pendingRestorePath = restoredDirectoryPath;
           scanPendingRestorePath();
+        } else {
+          pendingRestorePath = null;
         }
         return;
       }
