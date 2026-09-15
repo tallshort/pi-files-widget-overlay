@@ -60,10 +60,6 @@ interface RootLocation {
   selectedFilePath: string | null;
 }
 
-interface RootPickerState {
-  open: boolean;
-  selectedIndex: number;
-}
 
 type ScanMode = "full" | "safe" | "none";
 
@@ -317,7 +313,6 @@ export function createFileBrowser(
   let repo = false;
   let activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
   const anchorLocations = new Map<string, RootLocation>();
-  const rootPicker: RootPickerState = { open: false, selectedIndex: activeAnchorIndex };
   let initialRoot = rootPath;
   let usesGitTree = false;
   let gitStatus = new Map<string, string>();
@@ -1188,13 +1183,11 @@ export function createFileBrowser(
     const anchor = rootAnchors[index];
     if (!anchor || !getPathInfoSync(anchor.path).isDirectory) {
       reportError(`Root unavailable: ${anchor ? sanitizeTerminalLabel(anchor.label) : "unknown"}`);
-      rootPicker.open = false;
       return;
     }
     anchorLocations.set(rootAnchors[activeAnchorIndex].id, currentLocation());
     activeAnchorIndex = index;
     initialRoot = anchor.path;
-    rootPicker.open = false;
     const savedLocation = anchorLocations.get(anchor.id);
     setRoot(savedLocation?.rootPath ?? anchor.path, savedLocation);
   }
@@ -1345,7 +1338,6 @@ export function createFileBrowser(
   }
 
   function renderBrowser(width: number): string[] {
-    if (rootPicker.open) return renderRootPicker(width);
     const lines: string[] = [];
     const branchDisplay = gitBranch ? theme.fg("accent", ` (${sanitizeTerminalLabel(gitBranch)})`) : "";
     const stats = browser.stats;
@@ -1443,23 +1435,6 @@ export function createFileBrowser(
 
     return lines;
   }
-  function renderRootPicker(width: number): string[] {
-    const maxRoots = Math.max(1, browser.browserHeight - 5);
-    const start = Math.max(0, Math.min(rootPicker.selectedIndex - Math.floor(maxRoots / 2), rootAnchors.length - maxRoots));
-    const visibleAnchors = rootAnchors.slice(start, start + maxRoots);
-    const lines = [theme.fg("accent", `Select root (${rootPicker.selectedIndex + 1}/${rootAnchors.length})`), theme.fg("borderMuted", "─".repeat(width))];
-    for (const [offset, anchor] of visibleAnchors.entries()) {
-      const index = start + offset;
-      const available = getPathInfoSync(anchor.path).isDirectory;
-      const marker = index === rootPicker.selectedIndex ? "›" : " ";
-      const current = index === activeAnchorIndex ? " (current)" : "";
-      const unavailable = available ? "" : " (unavailable)";
-      lines.push(truncateToWidth(`${marker} ${sanitizeTerminalLabel(anchor.label)} — ${sanitizeTerminalLabel(anchor.path)}${current}${unavailable}`, width));
-    }
-    lines.push(theme.fg("borderMuted", "─".repeat(width)));
-    lines.push(theme.fg("dim", "↑/↓: select  Enter: switch  Esc: cancel"));
-    return lines;
-  }
 
   function handleViewerInput(data: string): void {
     const action: ViewerAction = viewer.handleInput(data);
@@ -1479,13 +1454,6 @@ export function createFileBrowser(
   }
 
   function handleBrowserInput(data: string): void {
-    if (rootPicker.open) {
-      if (matchesKey(data, Key.escape)) rootPicker.open = false;
-      else if (matchesKey(data, Key.up) || matchesKey(data, "k")) rootPicker.selectedIndex = Math.max(0, rootPicker.selectedIndex - 1);
-      else if (matchesKey(data, Key.down) || matchesKey(data, "j")) rootPicker.selectedIndex = Math.min(rootAnchors.length - 1, rootPicker.selectedIndex + 1);
-      else if (matchesKey(data, Key.enter)) switchAnchor(rootPicker.selectedIndex);
-      return;
-    }
     if (!browser.searchMode && rootAnchors.length > 1 && (matchesKey(data, Key.tab) || matchesKey(data, "shift+tab"))) {
       const direction = matchesKey(data, "shift+tab") ? -1 : 1;
       switchAnchor((activeAnchorIndex + direction + rootAnchors.length) % rootAnchors.length);
@@ -1767,7 +1735,6 @@ export function createFileBrowser(
       if (viewer.isOpen()) {
         return viewer.render(width);
       }
-      if (rootPicker.open) return renderBrowser(width);
       return renderBrowserWithPreview(width);
     },
 
