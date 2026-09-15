@@ -11,8 +11,8 @@ function runGitSync(cwd: string, args: string[], timeout: number): string {
   return execFileSync("git", args, { cwd, encoding: "utf-8", timeout, stdio: "pipe", maxBuffer: GIT_MAX_BUFFER }).toString();
 }
 
-async function runGit(cwd: string, args: string[], timeout: number): Promise<string> {
-  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf-8", timeout, maxBuffer: GIT_MAX_BUFFER });
+async function runGit(cwd: string, args: string[], timeout: number, signal?: AbortSignal): Promise<string> {
+  const { stdout } = await execFileAsync("git", args, { cwd, encoding: "utf-8", timeout, maxBuffer: GIT_MAX_BUFFER, signal });
   return stdout.toString();
 }
 
@@ -25,9 +25,9 @@ export function isGitRepo(cwd: string): boolean {
   }
 }
 
-export async function isGitRepoAsync(cwd: string): Promise<boolean> {
+export async function isGitRepoAsync(cwd: string, signal?: AbortSignal): Promise<boolean> {
   try {
-    await runGit(cwd, ["rev-parse", "--is-inside-work-tree"], 2000);
+    await runGit(cwd, ["rev-parse", "--is-inside-work-tree"], 2000, signal);
     return true;
   } catch {
     return false;
@@ -140,10 +140,10 @@ export function getGitFileList(cwd: string, onError?: GitErrorReporter): string[
   return Array.from(files);
 }
 
-export async function getGitFileListAsync(cwd: string): Promise<{ files: string[]; failed: boolean; trackedFailed: boolean; statusFailed: boolean }> {
+export async function getGitFileListAsync(cwd: string, signal?: AbortSignal): Promise<{ files: string[]; failed: boolean; trackedFailed: boolean; statusFailed: boolean }> {
   const [trackedResult, statusResult] = await Promise.allSettled([
-    runGit(cwd, ["ls-files", "-z"], 5000),
-    getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }),
+    runGit(cwd, ["ls-files", "-z"], 5000, signal),
+    getGitStatusAsync(cwd, { includeIgnored: false, includeUntracked: true }, signal),
   ]);
   const trackedFailed = trackedResult.status === "rejected";
   const statusFailed = statusResult.status === "rejected" || (statusResult.status === "fulfilled" && statusResult.value.failed);
@@ -172,30 +172,30 @@ export function getGitDiffStats(cwd: string, onError?: GitErrorReporter): Map<st
   return stats;
 }
 
-export async function getGitStatusAsync(cwd: string, options: { includeIgnored?: boolean; includeUntracked?: boolean } = {}): Promise<{ status: Map<string, string>; failed: boolean }> {
+export async function getGitStatusAsync(cwd: string, options: { includeIgnored?: boolean; includeUntracked?: boolean } = {}, signal?: AbortSignal): Promise<{ status: Map<string, string>; failed: boolean }> {
   try {
     const args = ["status", "--porcelain=v1", "-z"];
     if (options.includeIgnored !== false) args.push("--ignored");
     if (options.includeUntracked) args.push("-uall");
-    const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd), runGit(cwd, args, 5000)]);
+    const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd), runGit(cwd, args, 5000, signal)]);
     return { status: parseGitStatus(output, prefix), failed: false };
   } catch {
     return { status: new Map(), failed: true };
   }
 }
 
-export async function getGitBranchAsync(cwd: string): Promise<string> {
+export async function getGitBranchAsync(cwd: string, signal?: AbortSignal): Promise<string> {
   try {
-    return (await runGit(cwd, ["branch", "--show-current"], 2000)).trim();
+    return (await runGit(cwd, ["branch", "--show-current"], 2000, signal)).trim();
   } catch {
     return "";
   }
 }
 
-export async function getGitDiffStatsAsync(cwd: string): Promise<{ stats: Map<string, DiffStats>; failed: boolean }> {
+export async function getGitDiffStatsAsync(cwd: string, signal?: AbortSignal): Promise<{ stats: Map<string, DiffStats>; failed: boolean }> {
   const stats = new Map<string, DiffStats>();
   try {
-    const output = await runGit(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000);
+    const output = await runGit(cwd, ["diff", "--relative", "--numstat", "-z", "HEAD"], 5000, signal);
     parseGitDiffStats(output, stats);
     return { stats, failed: false };
   } catch {

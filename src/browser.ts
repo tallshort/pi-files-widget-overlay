@@ -381,6 +381,7 @@ export function createFileBrowser(
   // the same root. Root generation alone cannot distinguish that transition.
   let treeGeneration = 0;
   let gitRefreshGeneration: number | null = null;
+  let gitAbort = new AbortController();
   let contentSearchGeneration = 0;
   let contentSearchAbort: AbortController | null = null;
   let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
@@ -866,6 +867,7 @@ export function createFileBrowser(
     // Closing or re-rooting must invalidate already-running batches too: clearing
     // only their timers lets an awaited scan reschedule itself after the overlay closes.
     rootGeneration += 1;
+    gitAbort.abort();
     treeGeneration += 1;
     browser.scanState.isScanning = false;
     browser.scanState.pending = 0;
@@ -1013,10 +1015,10 @@ export function createFileBrowser(
     gitRefreshGeneration = generation;
 
     void Promise.all([
-      getGitStatusAsync(refreshRoot, { includeUntracked: true }),
-      getGitDiffStatsAsync(refreshRoot),
-      getGitBranchAsync(refreshRoot),
-      retryFileList ? getGitFileListAsync(refreshRoot) : Promise.resolve(null),
+      getGitStatusAsync(refreshRoot, { includeUntracked: true }, gitAbort.signal),
+      getGitDiffStatsAsync(refreshRoot, gitAbort.signal),
+      getGitBranchAsync(refreshRoot, gitAbort.signal),
+      retryFileList ? getGitFileListAsync(refreshRoot, gitAbort.signal) : Promise.resolve(null),
     ])
       .then(([statusResult, diffStatsResult, branch, fileListResult]) => {
         if (generation !== rootGeneration) return;
@@ -1071,6 +1073,7 @@ export function createFileBrowser(
     previewViewer.close();
     clearContentSearch();
     rootGeneration += 1;
+    gitAbort = new AbortController();
     treeGeneration += 1;
     rootPath = resolve(newRoot);
     browser.errorMessage = null;
@@ -1112,7 +1115,7 @@ export function createFileBrowser(
     if (browser.root) enqueueScan(browser.root, 0, true);
 
     void (async () => {
-      const gitRepo = await isGitRepoAsync(rootPath);
+      const gitRepo = await isGitRepoAsync(rootPath, gitAbort.signal);
       if (generation !== rootGeneration) return;
 
       if (!gitRepo) {
@@ -1121,10 +1124,10 @@ export function createFileBrowser(
       }
 
       const [statusResult, diffStatsResult, branch, fileListResult] = await Promise.all([
-        getGitStatusAsync(rootPath, { includeUntracked: true }),
-        getGitDiffStatsAsync(rootPath),
-        getGitBranchAsync(rootPath),
-        getGitFileListAsync(rootPath),
+        getGitStatusAsync(rootPath, { includeUntracked: true }, gitAbort.signal),
+        getGitDiffStatsAsync(rootPath, gitAbort.signal),
+        getGitBranchAsync(rootPath, gitAbort.signal),
+        getGitFileListAsync(rootPath, gitAbort.signal),
       ]);
       if (generation !== rootGeneration) return;
 
