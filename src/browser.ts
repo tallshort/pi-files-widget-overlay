@@ -612,7 +612,7 @@ export function createFileBrowser(
     queueLineCountsForDirectory(root);
   }
   function reportError(message: string): void {
-    browser.errorMessage ??= message;
+    browser.errorMessage = message;
     if (errorTimer) clearTimeout(errorTimer);
     errorTimer = setTimeout(() => {
       browser.errorMessage = null;
