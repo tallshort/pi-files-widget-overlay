@@ -463,6 +463,15 @@ export function createFileBrowser(
       }
       return false;
     }
+    const restoringDirectory = pendingRestorePath === restoredDirectoryPath;
+    if ((restoringDirectory && !node.isDirectory) || (!restoringDirectory && node.isDirectory)) {
+      if (!restoringDirectory && restoredDirectoryPath) {
+        pendingRestorePath = restoredDirectoryPath;
+        return restoreInitialPosition();
+      }
+      pendingRestorePath = null;
+      return false;
+    }
     for (let ancestor: FileNode | undefined = node; ancestor; ancestor = ancestor.parent) ancestor.expanded = true;
     refreshLists();
     const index = getDisplayList().findIndex(item => item.node.path === pendingRestorePath);

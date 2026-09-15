@@ -683,6 +683,17 @@ describe("file browser expanded changed view", () => {
     expect(browser.getBrowsePosition().selectedFilePath).toBeNull();
   });
 
+  it("abandons a missing restored safe-mode directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-safe-"));
+    directories.push(root);
+    await Promise.all(Array.from({ length: 200 }, (_, index) => writeFile(join(root, `entry-${index}.ts`), "\n")));
+    const missingDirectory = join(root, "missing", "nested");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, join(missingDirectory, "gone.ts"), missingDirectory);
+
+    await waitForScanComplete(browser);
+    expect(browser.getBrowsePosition().directoryPath).toBe(root);
+  });
+
   it("discards scans queued for a previous root", async () => {
     const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
     directories.push(parent);
