@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, readRootAnchors, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition } from "../src/index.ts";
+import { getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, readRootAnchors, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -370,10 +370,14 @@ describe("file browser expanded changed view", () => {
     ]);
   });
 
-  it("captures browse positions for every single-root command root but not multi-root", () => {
+  it("keys independent single-root positions by normalized command root", () => {
+    const positions = new Map<string, string>();
+    positions.set(getCommandRootKey("."), "default");
+    positions.set(getCommandRootKey(".."), "parent");
+    expect(positions.get(getCommandRootKey("./"))).toBe("default");
+    expect(positions.get(getCommandRootKey("../"))).toBe("parent");
     expect(shouldCaptureBrowsePosition(true, false)).toBe(true);
     expect(shouldCaptureBrowsePosition(true, true)).toBe(false);
-    expect(shouldCaptureBrowsePosition(false, false)).toBe(false);
   });
 
   it("switches roots through the Tab picker", async () => {

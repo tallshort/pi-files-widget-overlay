@@ -66,6 +66,10 @@ export function shouldCaptureBrowsePosition(restoreEnabled: boolean, multiRoot: 
   return restoreEnabled && !multiRoot;
 }
 
+export function getCommandRootKey(path: string): string {
+  return resolve(path);
+}
+
 
 export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
   const activityWidth = activity ? visibleWidth(` ${activity}`) : 0;
@@ -162,7 +166,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
       const hasExplicitPath = Boolean(args?.trim());
       const rootAnchors = readRootAnchors(cwd, resolved.path);
       const multiRoot = rootAnchors.length > 1;
-      const commandRoot = resolve(resolved.path);
+      const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
       const restored = restoreBrowsePosition && !multiRoot && restoredPosition
         ? resolveRestoredPosition(resolved.path, restoredPosition)

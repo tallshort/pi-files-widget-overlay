@@ -103,7 +103,7 @@ In selection mode, `j` / `k` or `↑` / `↓`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl
 
 ## Configuration
 
-Browse-position restoration is disabled by default. To restore the last selected file or browser directory when reopening `/readfiles` without a path in the same Pi session, add this namespace to Pi's global settings file (`$PI_CODING_AGENT_DIR/settings.json`, defaulting to `~/.pi/agent/settings.json`):
+Browse-position restoration is disabled by default. To restore the last selected file or browser directory for each single-root `/readfiles` command root in the same Pi session, add this namespace to Pi's global settings file (`$PI_CODING_AGENT_DIR/settings.json`, defaulting to `~/.pi/agent/settings.json`):
 
 ```json
 {
