@@ -62,6 +62,10 @@ export function readRootAnchors(cwd: string, primaryPath: string, settingsPath =
   } catch { /* absent or malformed settings leave the primary root intact */ }
   return anchors;
 }
+export function shouldCaptureBrowsePosition(restoreEnabled: boolean, hasExplicitPath: boolean, multiRoot: boolean): boolean {
+  return restoreEnabled && !hasExplicitPath && !multiRoot;
+}
+
 
 export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
   const activityWidth = activity ? visibleWidth(` ${activity}`) : 0;
@@ -203,7 +207,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
           initialDirectoryPath,
           rootAnchors
         );
-        if (restoreBrowsePosition && !multiRoot) {
+        if (shouldCaptureBrowsePosition(restoreBrowsePosition, hasExplicitPath, multiRoot)) {
           captureBrowsePosition = () => {
             lastBrowsePosition = browser.getBrowsePosition();
           };
