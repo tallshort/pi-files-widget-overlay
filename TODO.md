@@ -56,6 +56,6 @@ This is the backlog for the current floating-overlay implementation, not the his
 
 ### Design evaluation (not scheduled)
 
-- [x] Add configuration-defined multi-root `/readfiles` browsing: preserve single-path command semantics; use a global `piFilesWidgetOverlay.roots` list and in-overlay `Tab` picker; retain positions only while the overlay is open; and reset root-local async/UI state on switching. See `docs/DESIGN.md`.
+- [x] Add command-defined multi-root `/readfiles` browsing: accept whitespace-separated and quoted paths, switch roots directly with `Tab` / `Shift-Tab`, retain locations only while the overlay is open, and reset root-local async/UI state on switching. See `docs/DESIGN.md`.
 - [x] Add an `@` content filter alongside filename `/` search, using cached SDK `createGrepTool` with bounded, context-free asynchronous results and cancellation. By design it filters files only; use Viewer `/` to locate individual matches.
 - [x] Add a `y` shortcut to copy the selected Browser file or directory and current Viewer file absolute path. Show a dim `Path copied` transient hint in the relevant title area, auto-dismiss it after a few seconds, and add no dependencies.
