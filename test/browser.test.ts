@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, readRootAnchors, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition } from "../src/index.ts";
+import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, parseReadfilesPaths, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -356,17 +356,15 @@ describe("file browser expanded changed view", () => {
     expect(readRestoreBrowsePositionSetting(settings)).toBe(false);
   });
 
-  it("parses global multi-root anchors without changing the command root", async () => {
+  it("parses quoted command-line multi-root paths", async () => {
     const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-root-"));
-    const sibling = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-root-"));
-    const settingsDirectory = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-settings-"));
-    directories.push(root, sibling, settingsDirectory);
-    const settings = join(settingsDirectory, "settings.json");
-    await writeFile(settings, JSON.stringify({ piFilesWidgetOverlay: { roots: [{ path: sibling, label: "Other\u001b[31m" }, { path: root }, { path: 1 }] } }));
+    const sibling = await mkdtemp(join(tmpdir(), "pi-files widget overlay root-"));
+    directories.push(root, sibling);
 
-    expect(readRootAnchors(root, root, settings)).toEqual([
+    expect(parseReadfilesPaths(`./src "${sibling}" ./test`)).toEqual(["./src", sibling, "./test"]);
+    expect(createRootAnchors([root, sibling])).toEqual([
       { id: root, path: root, label: root.split("/").at(-1) },
-      { id: sibling, path: sibling, label: "Other�[31m" },
+      { id: sibling, path: sibling, label: sibling.split("/").at(-1) },
     ]);
   });
 

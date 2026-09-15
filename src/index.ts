@@ -41,26 +41,21 @@ export interface RootAnchorConfig {
   label: string;
 }
 
-export function readRootAnchors(cwd: string, primaryPath: string, settingsPath = getRestoreBrowsePositionSettingsPath()): RootAnchorConfig[] {
-  const anchors = [{ id: resolve(primaryPath), path: resolve(primaryPath), label: basename(resolve(primaryPath)) || resolve(primaryPath) }];
-  try {
-    const settings: unknown = JSON.parse(readFileSync(settingsPath, "utf-8"));
-    const namespace = settings && typeof settings === "object" ? (settings as Record<string, unknown>).piFilesWidgetOverlay : null;
-    const roots = namespace && typeof namespace === "object" ? (namespace as Record<string, unknown>).roots : null;
-    if (!Array.isArray(roots)) return anchors;
-    for (const entry of roots) {
-      if (!entry || typeof entry !== "object" || typeof (entry as Record<string, unknown>).path !== "string") continue;
-      let candidate = (entry as { path: string }).path.trim();
-      if (!candidate) continue;
-      if (candidate === "~") candidate = homedir();
-      else if (candidate.startsWith("~/")) candidate = join(homedir(), candidate.slice(2));
-      const path = isAbsolute(candidate) ? resolve(candidate) : resolve(cwd, candidate);
-      if (anchors.some(anchor => anchor.path === path)) continue;
-      const label = (entry as Record<string, unknown>).label;
-      anchors.push({ id: path, path, label: typeof label === "string" && label.trim() ? sanitizeTerminalLabel(label) : basename(path) || path });
-    }
-  } catch { /* absent or malformed settings leave the primary root intact */ }
-  return anchors;
+/** Parse whitespace-separated paths, preserving single- and double-quoted paths. */
+export function parseReadfilesPaths(args: string | undefined): string[] {
+  if (!args?.trim()) return [];
+  const paths: string[] = [];
+  const expression = /(?:"([^"]*)"|'([^']*)'|(\S+))/g;
+  for (const match of args.matchAll(expression)) paths.push(match[1] ?? match[2] ?? match[3]);
+  return paths;
+}
+
+export function createRootAnchors(paths: string[]): RootAnchorConfig[] {
+  return paths.reduce<RootAnchorConfig[]>((anchors, input) => {
+    const path = resolve(input);
+    if (!anchors.some(anchor => anchor.path === path)) anchors.push({ id: path, path, label: basename(path) || path });
+    return anchors;
+  }, []);
 }
 export function shouldCaptureBrowsePosition(restoreEnabled: boolean, multiRoot: boolean): boolean {
   return restoreEnabled && !multiRoot;
@@ -154,17 +149,18 @@ export default function editorExtension(pi: ExtensionAPI): void {
   const restoreBrowsePosition = readRestoreBrowsePositionSetting();
   const browsePositions = new Map<string, BrowsePosition>();
   pi.registerCommand("readfiles", {
-    description: "Open file browser as a floating overlay (optional: /readfiles <path> to start outside the current directory)",
+    description: "Open file browser as a floating overlay (optional: /readfiles <path...> for one or more roots)",
     handler: async (args, ctx) => {
-
       const cwd = ctx.cwd;
-      const resolved = resolveInitialPath(args, cwd);
-      if (resolved.error) {
-        ctx.ui.notify(sanitizeTerminalLabel(resolved.error), "error");
+      const requestedPaths = parseReadfilesPaths(args);
+      const resolvedPaths = (requestedPaths.length > 0 ? requestedPaths : [cwd]).map(path => resolveInitialPath(path, cwd));
+      const failed = resolvedPaths.find(result => result.error);
+      if (failed?.error) {
+        ctx.ui.notify(sanitizeTerminalLabel(failed.error), "error");
         return;
       }
-      const hasExplicitPath = Boolean(args?.trim());
-      const rootAnchors = readRootAnchors(cwd, resolved.path);
+      const resolved = resolvedPaths[0];
+      const rootAnchors = createRootAnchors(resolvedPaths.map(result => result.path));
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
