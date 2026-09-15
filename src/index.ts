@@ -72,17 +72,18 @@ export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, ac
   return { availableWidth, rootWidth: hasRestorePath ? Math.floor(availableWidth / 2) : availableWidth };
 }
 
+function resolveCommandPath(arg: string, cwd: string): string {
+  let candidate = arg;
+  if (candidate === "~") candidate = homedir();
+  else if (candidate.startsWith("~/")) candidate = join(homedir(), candidate.slice(2));
+  return isAbsolute(candidate) ? candidate : resolve(cwd, candidate);
+}
+
 function resolveInitialPath(arg: string | undefined, cwd: string): { path: string; error?: string } {
   if (!arg) return { path: cwd };
-  let candidate = arg.trim();
+  let candidate = arg;
   if (!candidate) return { path: cwd };
-  const home = homedir();
-  if (candidate === "~") {
-    candidate = home;
-  } else if (candidate.startsWith("~/")) {
-    candidate = join(home, candidate.slice(2));
-  }
-  const absolute = isAbsolute(candidate) ? candidate : resolve(cwd, candidate);
+  const absolute = resolveCommandPath(candidate, cwd);
   try {
     if (!statSync(absolute).isDirectory()) {
       return { path: cwd, error: `${absolute} is not a directory` };
@@ -153,14 +154,13 @@ export default function editorExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const cwd = ctx.cwd;
       const requestedPaths = parseReadfilesPaths(args);
-      const resolvedPaths = (requestedPaths.length > 0 ? requestedPaths : [cwd]).map(path => resolveInitialPath(path, cwd));
-      const failed = resolvedPaths.find(result => result.error);
-      if (failed?.error) {
-        ctx.ui.notify(sanitizeTerminalLabel(failed.error), "error");
+      const primary = resolveInitialPath(requestedPaths[0], cwd);
+      if (primary.error) {
+        ctx.ui.notify(sanitizeTerminalLabel(primary.error), "error");
         return;
       }
-      const resolved = resolvedPaths[0];
-      const rootAnchors = createRootAnchors(resolvedPaths.map(result => result.path));
+      const resolved = primary;
+      const rootAnchors = createRootAnchors([primary.path, ...requestedPaths.slice(1).map(path => resolveCommandPath(path, cwd))]);
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;

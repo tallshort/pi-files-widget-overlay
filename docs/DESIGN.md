@@ -104,4 +104,4 @@ A root anchor differs from the current browsing root. `u` may still temporarily 
 
 `browser.ts` is the seam for root switching: it already owns root-local tree, Git, scan, grep, viewer, and generation state. A future `switchRoot()` must validate the target before changing state, capture the departing anchor's location, close viewer and preview, clear root-local UI state, increment generations, then load the new provisional tree. Background filesystem, LOC, Git, and grep work must verify both generation and active root before changing state. Current-session observed tool activity remains shared because it uses absolute paths.
 
-The first implementation must not create a virtual merged tree, cross-root search or changed-file navigation, multi-repository Git aggregation, multi-path command syntax, automatic root discovery, or persistent active-root state.
+The first implementation must not create a virtual merged tree, cross-root search or changed-file navigation, multi-repository Git aggregation, automatic root discovery, or persistent active-root state.

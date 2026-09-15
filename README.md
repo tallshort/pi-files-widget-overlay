@@ -61,7 +61,7 @@ npm run typecheck
 | `h` / `l` or `←` / `→` | Collapse/expand a directory; `l` / `→` opens a selected file. |
 | `PgUp` / `PgDn` | Page through the tree in the single-column layout. |
 | `p` | Toggle the tree/preview split on wide terminals. |
-| `Tab` | Open the configured multi-root picker when multiple roots are available. |
+| `Tab` | Open the command-provided multi-root picker when multiple roots are available. |
 | `y` | Copy the selected file or directory's absolute path. |
 | `c` | Toggle changed-only view within the current search results. |
 | `C` | Toggle expanded changed view within the current search results. |
@@ -123,8 +123,7 @@ Pass roots directly to the command, separated by whitespace; quote paths contain
 /readfiles ./src ./test
 /readfiles "./my src" "./my test"
 ```
-
-The first path is the initial root. Press `Tab` to switch roots. Multi-root root selection and locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
+The first path is the initial root. Press `Tab` to open the root picker, then use arrow keys and `Enter` to select a root. Multi-root root selection and locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
 ## Notes and edge cases
 
 - The overlay is centered at 95% of terminal width with a one-cell margin. Its maximum height is 95% of the terminal; panels start at 85% and `+` / `-` adjust within that limit.
