@@ -861,6 +861,12 @@ export function createFileBrowser(
   }
 
   function stopBackgroundTasks(): void {
+    // Closing or re-rooting must invalidate already-running batches too: clearing
+    // only their timers lets an awaited scan reschedule itself after the overlay closes.
+    rootGeneration += 1;
+    treeGeneration += 1;
+    browser.scanState.isScanning = false;
+    browser.scanState.pending = 0;
     if (lineCountTimer) {
       clearTimeout(lineCountTimer);
       lineCountTimer = null;

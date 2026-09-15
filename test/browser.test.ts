@@ -236,6 +236,17 @@ describe("file browser expanded changed view", () => {
 
     expect(closes).toBe(2);
   });
+
+  it("cancels queued scans when closing a browser", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-scan-"));
+    directories.push(root);
+    await Promise.all(Array.from({ length: 200 }, (_, index) => writeFile(join(root, `entry-${index}.ts`), "\n")));
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.handleInput("q");
+    await new Promise(resolve => setTimeout(resolve, 40));
+    expect(browser.getActivityLabel()).toBe("");
+  });
   it("restores a recorded file selection in its directory", async () => {
     const root = await createChangedRepository();
     const selectedFile = join(root, "unchanged.ts");
