@@ -485,7 +485,13 @@ export function createFileBrowser(
         return;
       }
       const next = current.children.find(child => child.name === parts[index]);
-      if (!next) return;
+      if (!next) {
+        if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
+          pendingRestorePath = restoredDirectoryPath;
+          scanPendingRestorePath();
+        }
+        return;
+      }
       if (index === parts.length - 1) {
         restoreInitialPosition();
         return;
