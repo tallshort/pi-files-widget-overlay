@@ -62,8 +62,8 @@ export function readRootAnchors(cwd: string, primaryPath: string, settingsPath =
   } catch { /* absent or malformed settings leave the primary root intact */ }
   return anchors;
 }
-export function shouldCaptureBrowsePosition(restoreEnabled: boolean, hasExplicitPath: boolean, multiRoot: boolean): boolean {
-  return restoreEnabled && !hasExplicitPath && !multiRoot;
+export function shouldCaptureBrowsePosition(restoreEnabled: boolean, multiRoot: boolean): boolean {
+  return restoreEnabled && !multiRoot;
 }
 
 
@@ -148,7 +148,7 @@ function truncatePathTail(path: string, width: number): string {
 export default function editorExtension(pi: ExtensionAPI): void {
   const agentModifiedFiles = new Set<string>();
   const restoreBrowsePosition = readRestoreBrowsePositionSetting();
-  let lastBrowsePosition: BrowsePosition | null = null;
+  const browsePositions = new Map<string, BrowsePosition>();
   pi.registerCommand("readfiles", {
     description: "Open file browser as a floating overlay (optional: /readfiles <path> to start outside the current directory)",
     handler: async (args, ctx) => {
@@ -162,8 +162,10 @@ export default function editorExtension(pi: ExtensionAPI): void {
       const hasExplicitPath = Boolean(args?.trim());
       const rootAnchors = readRootAnchors(cwd, resolved.path);
       const multiRoot = rootAnchors.length > 1;
-      const restored = restoreBrowsePosition && !multiRoot && !hasExplicitPath && lastBrowsePosition
-        ? resolveRestoredPosition(resolved.path, lastBrowsePosition)
+      const commandRoot = resolve(resolved.path);
+      const restoredPosition = browsePositions.get(commandRoot) ?? null;
+      const restored = restoreBrowsePosition && !multiRoot && restoredPosition
+        ? resolveRestoredPosition(resolved.path, restoredPosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
       const initialDirectoryPath = restored?.restored ? restored.directoryPath : undefined;
@@ -207,9 +209,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
           initialDirectoryPath,
           rootAnchors
         );
-        if (shouldCaptureBrowsePosition(restoreBrowsePosition, hasExplicitPath, multiRoot)) {
+        if (shouldCaptureBrowsePosition(restoreBrowsePosition, multiRoot)) {
           captureBrowsePosition = () => {
-            lastBrowsePosition = browser.getBrowsePosition();
+            browsePositions.set(commandRoot, browser.getBrowsePosition());
           };
         }
 
@@ -284,11 +286,11 @@ export default function editorExtension(pi: ExtensionAPI): void {
 
   pi.on("session_start", async () => {
     agentModifiedFiles.clear();
-    lastBrowsePosition = null;
+    browsePositions.clear();
   });
 
   pi.on("session_before_switch", () => {
     agentModifiedFiles.clear();
-    lastBrowsePosition = null;
+    browsePositions.clear();
   });
 }

@@ -370,11 +370,10 @@ describe("file browser expanded changed view", () => {
     ]);
   });
 
-  it("does not let explicit or multi-root commands replace the default restore position", () => {
-    expect(shouldCaptureBrowsePosition(true, false, false)).toBe(true);
-    expect(shouldCaptureBrowsePosition(true, true, false)).toBe(false);
-    expect(shouldCaptureBrowsePosition(true, false, true)).toBe(false);
-    expect(shouldCaptureBrowsePosition(false, false, false)).toBe(false);
+  it("captures browse positions for every single-root command root but not multi-root", () => {
+    expect(shouldCaptureBrowsePosition(true, false)).toBe(true);
+    expect(shouldCaptureBrowsePosition(true, true)).toBe(false);
+    expect(shouldCaptureBrowsePosition(false, false)).toBe(false);
   });
 
   it("switches roots through the Tab picker", async () => {

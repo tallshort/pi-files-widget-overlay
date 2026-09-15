@@ -113,7 +113,7 @@ Browse-position restoration is disabled by default. To restore the last selected
 }
 ```
 
-The extension reads this setting but never writes it. An explicit `/readfiles <path>` always starts at that path and never replaces the remembered default-root position. Restored state is memory-only, preserves the original browser root used by `.`, and is shown briefly in the header until the next input.
+The extension reads this setting but never writes it. Each single-root command root keeps an independent memory-only browsing position: `/readfiles`, `/readfiles <path>`, and another resolved path restore only their own last position. Equivalent path spellings share a normalized absolute-path record. Multi-root browsing does not retain positions after the Overlay closes.
 
 ### Multi-root setting
 
