@@ -385,6 +385,7 @@ export function createFileBrowser(
   let contentSearchGeneration = 0;
   let contentSearchAbort: AbortController | null = null;
   let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  let errorTimer: ReturnType<typeof setTimeout> | null = null;
   const grepTools = new Map<string, ReturnType<typeof createGrepTool>>();
   const normalizeGitPath = (path: string): string => path.split(sep).join("/");
 
@@ -448,6 +449,7 @@ export function createFileBrowser(
   function activityLabels(): string[] {
     const labels: string[] = [];
     if (browser.scanState.isScanning) labels.push("… scanning");
+    if (browser.errorMessage) labels.push(`⚠ ${browser.errorMessage}`);
     return labels;
   }
 
@@ -611,6 +613,12 @@ export function createFileBrowser(
   }
   function reportError(message: string): void {
     browser.errorMessage ??= message;
+    if (errorTimer) clearTimeout(errorTimer);
+    errorTimer = setTimeout(() => {
+      browser.errorMessage = null;
+      errorTimer = null;
+      requestRender();
+    }, 3000);
     requestRender();
   }
 
@@ -871,6 +879,11 @@ export function createFileBrowser(
     treeGeneration += 1;
     browser.scanState.isScanning = false;
     browser.scanState.pending = 0;
+    browser.errorMessage = null;
+    if (errorTimer) {
+      clearTimeout(errorTimer);
+      errorTimer = null;
+    }
     if (lineCountTimer) {
       clearTimeout(lineCountTimer);
       lineCountTimer = null;
