@@ -32,6 +32,7 @@ const CONTENT_SEARCH_DEBOUNCE_MS = 150;
 
 export interface BrowserController {
   getRootPath(): string;
+  getRootAnchor(): { label: string; index: number; count: number } | null;
   getActivityLabel(): string;
   getRestorePath(): string | null;
   isPathCopied(): boolean;
@@ -45,6 +46,23 @@ interface BrowserStats {
   totalLines?: number;
   additions: number;
   deletions: number;
+}
+
+export interface RootAnchor {
+  id: string;
+  path: string;
+  label: string;
+}
+
+interface RootLocation {
+  rootPath: string;
+  directoryPath: string;
+  selectedFilePath: string | null;
+}
+
+interface RootPickerState {
+  open: boolean;
+  selectedIndex: number;
 }
 
 type ScanMode = "full" | "safe" | "none";
@@ -288,13 +306,17 @@ export function createFileBrowser(
   requestRender: () => void,
   projectCwd: string = initialPath,
   initialSelectedPath?: string,
-  initialDirectoryPath?: string
+  initialDirectoryPath?: string,
+  rootAnchors: RootAnchor[] = [{ id: resolve(initialPath), path: resolve(initialPath), label: "." }]
 ): BrowserController {
   const ignored = getIgnoredNames();
 
   let rootPath = resolve(initialPath);
-  const initialRoot = rootPath;
   let repo = false;
+  let activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
+  const anchorLocations = new Map<string, RootLocation>();
+  const rootPicker: RootPickerState = { open: false, selectedIndex: activeAnchorIndex };
+  let initialRoot = rootAnchors[activeAnchorIndex]?.path ?? rootPath;
   let usesGitTree = false;
   let gitStatus = new Map<string, string>();
   let diffStats = new Map<string, DiffStats>();
@@ -1094,12 +1116,45 @@ export function createFileBrowser(
     })();
   }
 
-  function setRoot(newRoot: string): void {
-    if (viewer.isOpen()) {
-      viewer.close();
+  function currentLocation(): RootLocation {
+    const selected = getDisplayList()[browser.selectedIndex]?.node;
+    const selectedFilePath = selected && !selected.isDirectory ? selected.path : null;
+    return {
+      rootPath,
+      directoryPath: selected?.isDirectory ? selected.path : selectedFilePath ? dirname(selectedFilePath) : rootPath,
+      selectedFilePath,
+    };
+  }
+
+  function switchAnchor(index: number): void {
+    const anchor = rootAnchors[index];
+    if (!anchor || !getPathInfoSync(anchor.path).isDirectory) {
+      reportError(`Root unavailable: ${anchor ? sanitizeTerminalLabel(anchor.label) : "unknown"}`);
+      rootPicker.open = false;
+      return;
     }
-    pendingRestorePath = null;
-    restoredDirectoryPath = null;
+    anchorLocations.set(rootAnchors[activeAnchorIndex].id, currentLocation());
+    activeAnchorIndex = index;
+    initialRoot = anchor.path;
+    rootPicker.open = false;
+    setRoot(anchor.path, anchorLocations.get(anchor.id));
+  }
+
+  function setRoot(newRoot: string, restoreLocation?: RootLocation): void {
+    if (viewer.isOpen()) viewer.close();
+    if (previewViewer.isOpen()) previewViewer.close();
+    previewPath = null;
+    pendingRestorePath = restoreLocation?.selectedFilePath ?? restoreLocation?.directoryPath ?? null;
+    restoredDirectoryPath = restoreLocation?.directoryPath ?? null;
+    restoreNotice = null;
+    clearContentSearch();
+    browser.searchQuery = "";
+    browser.searchMode = false;
+    browser.showOnlyChanged = false;
+    browser.expandedChangedView = false;
+    browser.expandedForChangedView.clear();
+    browser.selectedIndex = 0;
+    browser.errorMessage = null;
     stopBackgroundTasks();
     scanQueue.length = 0;
     scanQueued.clear();
@@ -1231,6 +1286,7 @@ export function createFileBrowser(
   }
 
   function renderBrowser(width: number): string[] {
+    if (rootPicker.open) return renderRootPicker(width);
     const lines: string[] = [];
     const branchDisplay = gitBranch ? theme.fg("accent", ` (${sanitizeTerminalLabel(gitBranch)})`) : "";
     const stats = browser.stats;
@@ -1327,6 +1383,20 @@ export function createFileBrowser(
 
     return lines;
   }
+  function renderRootPicker(width: number): string[] {
+    const lines = [theme.fg("accent", "Select root"), theme.fg("borderMuted", "─".repeat(width))];
+    for (let index = 0; index < rootAnchors.length; index++) {
+      const anchor = rootAnchors[index];
+      const available = getPathInfoSync(anchor.path).isDirectory;
+      const marker = index === rootPicker.selectedIndex ? "›" : " ";
+      const current = index === activeAnchorIndex ? " (current)" : "";
+      const unavailable = available ? "" : " (unavailable)";
+      lines.push(truncateToWidth(`${marker} ${sanitizeTerminalLabel(anchor.label)} — ${sanitizeTerminalLabel(anchor.path)}${current}${unavailable}`, width));
+    }
+    lines.push(theme.fg("borderMuted", "─".repeat(width)));
+    lines.push(theme.fg("dim", "↑/↓: select  Enter: switch  Esc: cancel"));
+    return lines;
+  }
 
   function handleViewerInput(data: string): void {
     const action: ViewerAction = viewer.handleInput(data);
@@ -1346,6 +1416,18 @@ export function createFileBrowser(
   }
 
   function handleBrowserInput(data: string): void {
+    if (rootPicker.open) {
+      if (matchesKey(data, Key.escape)) rootPicker.open = false;
+      else if (matchesKey(data, Key.up) || matchesKey(data, "k")) rootPicker.selectedIndex = Math.max(0, rootPicker.selectedIndex - 1);
+      else if (matchesKey(data, Key.down) || matchesKey(data, "j")) rootPicker.selectedIndex = Math.min(rootAnchors.length - 1, rootPicker.selectedIndex + 1);
+      else if (matchesKey(data, Key.enter)) switchAnchor(rootPicker.selectedIndex);
+      return;
+    }
+    if (!browser.searchMode && rootAnchors.length > 1 && matchesKey(data, Key.tab)) {
+      rootPicker.open = true;
+      rootPicker.selectedIndex = activeAnchorIndex;
+      return;
+    }
     const previewNavigation = /^\d$/.test(data) || matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u") || matchesKey(data, "w");
     if (!browser.searchMode && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
       previewViewer.handleInput(data);
@@ -1584,6 +1666,11 @@ export function createFileBrowser(
     getRootPath(): string {
       return formatRootPath(rootPath);
     },
+    getRootAnchor(): { label: string; index: number; count: number } | null {
+      if (rootAnchors.length < 2) return null;
+      const anchor = rootAnchors[activeAnchorIndex];
+      return { label: anchor.label, index: activeAnchorIndex + 1, count: rootAnchors.length };
+    },
     getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null } {
       const selected = getDisplayList()[browser.selectedIndex]?.node;
       const selectedFilePath = selected && !selected.isDirectory ? selected.path : null;
@@ -1617,7 +1704,7 @@ export function createFileBrowser(
       if (viewer.isOpen()) {
         return viewer.render(width);
       }
-
+      if (rootPicker.open) return renderBrowser(width);
       return renderBrowserWithPreview(width);
     },
 

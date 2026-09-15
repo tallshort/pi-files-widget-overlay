@@ -61,6 +61,7 @@ npm run typecheck
 | `h` / `l` or `←` / `→` | Collapse/expand a directory; `l` / `→` opens a selected file. |
 | `PgUp` / `PgDn` | Page through the tree in the single-column layout. |
 | `p` | Toggle the tree/preview split on wide terminals. |
+| `Tab` | Open the configured multi-root picker when multiple roots are available. |
 | `y` | Copy the selected file or directory's absolute path. |
 | `c` | Toggle changed-only view within the current search results. |
 | `C` | Toggle expanded changed view within the current search results. |
@@ -114,9 +115,9 @@ Browse-position restoration is disabled by default. To restore the last selected
 
 The extension reads this setting but never writes it. An explicit `/readfiles <path>` always starts at that path. Restored state is memory-only, preserves the original browser root used by `.`, and is shown briefly in the header until the next input.
 
-### Planned multi-root setting
+### Multi-root setting
 
-Multi-root browsing is designed but not implemented yet. When it is implemented, its optional roots will use the same **global** settings file and namespace—not project `.pi/settings.json`—so their behavior remains unambiguous when `/readfiles <path>` opens a directory outside `ctx.cwd`:
+Optional roots use the same **global** settings file and namespace—not project `.pi/settings.json`—so their behavior remains unambiguous when `/readfiles <path>` opens a directory outside `ctx.cwd`:
 
 ```json
 {
@@ -129,7 +130,7 @@ Multi-root browsing is designed but not implemented yet. When it is implemented,
 }
 ```
 
-Configured paths will resolve relative to the command's `ctx.cwd`; the command root remains first, and malformed or inaccessible configured roots will not prevent normal single-root browsing. In planned multi-root mode, root selection and per-root locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
+Configured paths resolve relative to the command's `ctx.cwd`; the command root remains first, and malformed or inaccessible configured roots do not prevent normal browsing. In multi-root mode, root selection and per-root locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
 
 ## Notes and edge cases
 

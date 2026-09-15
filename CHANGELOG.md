@@ -6,6 +6,7 @@ All notable changes to this extension will be documented in this file.
 
 ### Changed
 - Require Pi and Pi TUI `>=0.84.4`; resolve browse-position settings through Pi's configured agent directory and use current extension-context paths when opening or tracking files.
+- Add global-settings multi-root browsing with an in-overlay `Tab` picker, root-local async isolation, and overlay-local positions.
 
 ## [0.6.2] - 2026-09-13
 

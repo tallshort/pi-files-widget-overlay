@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
+import { getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, readRestoreBrowsePositionSetting, readRootAnchors, resolveRestoredPosition, sanitizeRestorePathLabel } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -327,6 +327,36 @@ describe("file browser expanded changed view", () => {
     expect(readRestoreBrowsePositionSetting(settings)).toBe(false);
     await writeFile(settings, "not JSON");
     expect(readRestoreBrowsePositionSetting(settings)).toBe(false);
+  });
+
+  it("parses global multi-root anchors without changing the command root", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-root-"));
+    const sibling = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-root-"));
+    const settingsDirectory = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-settings-"));
+    directories.push(root, sibling, settingsDirectory);
+    const settings = join(settingsDirectory, "settings.json");
+    await writeFile(settings, JSON.stringify({ piFilesWidgetOverlay: { roots: [{ path: sibling, label: "Other\u001b[31m" }, { path: root }, { path: 1 }] } }));
+
+    expect(readRootAnchors(root, root, settings)).toEqual([
+      { id: root, path: root, label: root.split("/").at(-1) },
+      { id: sibling, path: sibling, label: "Other�[31m" },
+    ]);
+  });
+
+  it("switches roots through the Tab picker", async () => {
+    const first = await createChangedRepository();
+    const second = await createChangedRepository();
+    const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
+      { id: first, path: first, label: "First" },
+      { id: second, path: second, label: "Second" },
+    ]);
+    await waitForScanComplete(browser);
+    browser.handleInput("\t");
+    expect(browser.render(100).join("\n")).toContain("Select root");
+    browser.handleInput("\u001b[B");
+    browser.handleInput("\r");
+    await waitFor(() => browser.getBrowsePosition().rootPath === second);
+    expect(browser.getRootAnchor()).toEqual({ label: "Second", index: 2, count: 2 });
   });
 
   it("sanitizes restore labels and reserves header room for scanning", () => {

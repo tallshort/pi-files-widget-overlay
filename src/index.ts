@@ -9,7 +9,7 @@ import { getAgentDir, isEditToolResult, isWriteToolResult, type ExtensionAPI } f
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
 import { homedir } from "node:os";
-import { dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
@@ -34,6 +34,33 @@ export function readRestoreBrowsePositionSetting(settingsPath = getRestoreBrowse
 
 export function sanitizeRestorePathLabel(path: string): string {
   return sanitizeTerminalLabel(path);
+}
+export interface RootAnchorConfig {
+  id: string;
+  path: string;
+  label: string;
+}
+
+export function readRootAnchors(cwd: string, primaryPath: string, settingsPath = getRestoreBrowsePositionSettingsPath()): RootAnchorConfig[] {
+  const anchors = [{ id: resolve(primaryPath), path: resolve(primaryPath), label: basename(resolve(primaryPath)) || resolve(primaryPath) }];
+  try {
+    const settings: unknown = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    const namespace = settings && typeof settings === "object" ? (settings as Record<string, unknown>).piFilesWidgetOverlay : null;
+    const roots = namespace && typeof namespace === "object" ? (namespace as Record<string, unknown>).roots : null;
+    if (!Array.isArray(roots)) return anchors;
+    for (const entry of roots) {
+      if (!entry || typeof entry !== "object" || typeof (entry as Record<string, unknown>).path !== "string") continue;
+      let candidate = (entry as { path: string }).path.trim();
+      if (!candidate) continue;
+      if (candidate === "~") candidate = homedir();
+      else if (candidate.startsWith("~/")) candidate = join(homedir(), candidate.slice(2));
+      const path = isAbsolute(candidate) ? resolve(candidate) : resolve(cwd, candidate);
+      if (anchors.some(anchor => anchor.path === path)) continue;
+      const label = (entry as Record<string, unknown>).label;
+      anchors.push({ id: path, path, label: typeof label === "string" && label.trim() ? sanitizeTerminalLabel(label) : basename(path) || path });
+    }
+  } catch { /* absent or malformed settings leave the primary root intact */ }
+  return anchors;
 }
 
 export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
@@ -129,7 +156,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
         return;
       }
       const hasExplicitPath = Boolean(args?.trim());
-      const restored = restoreBrowsePosition && !hasExplicitPath && lastBrowsePosition
+      const rootAnchors = readRootAnchors(cwd, resolved.path);
+      const multiRoot = rootAnchors.length > 1;
+      const restored = restoreBrowsePosition && !multiRoot && !hasExplicitPath && lastBrowsePosition
         ? resolveRestoredPosition(resolved.path, lastBrowsePosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
@@ -171,9 +200,10 @@ export default function editorExtension(pi: ExtensionAPI): void {
           requestRender,
           cwd,
           initialSelectedPath,
-          initialDirectoryPath
+          initialDirectoryPath,
+          rootAnchors
         );
-        if (restoreBrowsePosition) {
+        if (restoreBrowsePosition && !multiRoot) {
           captureBrowsePosition = () => {
             lastBrowsePosition = browser.getBrowsePosition();
           };
@@ -197,7 +227,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
           const activity = browser.getActivityLabel();
           const copyHint = browser.isPathCopied() ? " Path copied" : "";
           const restoredPath = browser.getRestorePath();
-          const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", "— ");
+          const rootAnchor = browser.getRootAnchor();
+          const anchorBadge = rootAnchor ? ` [${sanitizeTerminalLabel(rootAnchor.label)} ${rootAnchor.index}/${rootAnchor.count}]` : "";
+          const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", `—${anchorBadge} `);
           const safeRootPath = sanitizeRestorePathLabel(browser.getRootPath());
           const safeRestoredPath = restoredPath ? sanitizeRestorePathLabel(restoredPath) : null;
           const { availableWidth, rootWidth } = getOverlayPathWidths(innerWidth, visibleWidth(prefix), `${activity}${copyHint}`, !!safeRestoredPath);

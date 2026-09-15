@@ -78,13 +78,13 @@ This replaces the upstream use of `bat`, `glow`, and `delta`, avoiding tool-spec
 - Never let a background scan from an old root modify a newly re-rooted browser.
 - Degrade gracefully when Git metadata or a filesystem operation is unavailable.
 
-## Evaluated future design: multi-root browsing
+## Multi-root browsing
 
-This is a design decision only; implementation is not scheduled. Pi exposes one `ctx.cwd`, not a workspace-root list, so `/readfiles` must not infer roots from Git worktrees, parent directories, or sibling repositories.
+Pi exposes one `ctx.cwd`, not a workspace-root list, so `/readfiles` does not infer roots from Git worktrees, parent directories, or sibling repositories.
 
 ### Root model
 
-A future multi-root overlay has a small root-anchor interface:
+The multi-root overlay has a small root-anchor interface:
 
 ```ts
 type RootAnchor = {
