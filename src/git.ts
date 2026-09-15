@@ -46,10 +46,9 @@ function getGitPathPrefix(cwd: string): string {
     return "";
   }
 }
-
-async function getGitPathPrefixAsync(cwd: string): Promise<string> {
+async function getGitPathPrefixAsync(cwd: string, signal?: AbortSignal): Promise<string> {
   try {
-    return (await runGit(cwd, ["rev-parse", "--show-prefix"], 2000)).trim();
+    return (await runGit(cwd, ["rev-parse", "--show-prefix"], 2000, signal)).trim();
   } catch {
     return "";
   }
@@ -177,7 +176,7 @@ export async function getGitStatusAsync(cwd: string, options: { includeIgnored?:
     const args = ["status", "--porcelain=v1", "-z"];
     if (options.includeIgnored !== false) args.push("--ignored");
     if (options.includeUntracked) args.push("-uall");
-    const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd), runGit(cwd, args, 5000, signal)]);
+    const [prefix, output] = await Promise.all([getGitPathPrefixAsync(cwd, signal), runGit(cwd, args, 5000, signal)]);
     return { status: parseGitStatus(output, prefix), failed: false };
   } catch {
     return { status: new Map(), failed: true };
