@@ -259,7 +259,7 @@ describe("file browser expanded changed view", () => {
     browser.handleInput("q");
     renders = 0;
     release();
-    await new Promise(resolve => setTimeout(resolve, 40));
+    await new Promise<void>(resolve => setImmediate(resolve));
     expect(browser.getActivityLabel()).toBe("");
     expect(renders).toBe(0);
   });
