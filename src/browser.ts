@@ -1,6 +1,6 @@
 import { createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { lstatSync, realpathSync, statSync } from "node:fs";
+import { lstatSync, realpathSync, statSync, type Dirent } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -307,9 +307,11 @@ export function createFileBrowser(
   projectCwd: string = initialPath,
   initialSelectedPath?: string,
   initialDirectoryPath?: string,
-  rootAnchors: RootAnchor[] = [{ id: resolve(initialPath), path: resolve(initialPath), label: "." }]
+  rootAnchors: RootAnchor[] = [{ id: resolve(initialPath), path: resolve(initialPath), label: "." }],
+  options: { readDirectory?: (path: string) => Promise<Dirent[]> } = {}
 ): BrowserController {
   const ignored = getIgnoredNames();
+  const readDirectory = options.readDirectory ?? (path => readdir(path, { withFileTypes: true }));
 
   let rootPath = resolve(initialPath);
   let repo = false;
@@ -738,7 +740,7 @@ export function createFileBrowser(
 
   async function scanDirectory(node: FileNode, depth: number, generation: number, tree: number): Promise<void> {
     try {
-      const entries = await readdir(node.path, { withFileTypes: true });
+      const entries = await readDirectory(node.path);
       if (generation !== rootGeneration || tree !== treeGeneration) return;
       const sorted = [...entries].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
 
