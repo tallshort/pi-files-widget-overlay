@@ -1430,7 +1430,7 @@ export function createFileBrowser(
 
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
-    const rootsHelp = rootAnchors.length > 1 ? "  Tab: roots" : "";
+    const rootsHelp = rootAnchors.length > 1 ? "  Tab/Shift-Tab: roots" : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
       : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  y: copy path  ?: help" + rootsHelp) + changedIndicator;
@@ -1486,9 +1486,9 @@ export function createFileBrowser(
       else if (matchesKey(data, Key.enter)) switchAnchor(rootPicker.selectedIndex);
       return;
     }
-    if (!browser.searchMode && rootAnchors.length > 1 && matchesKey(data, Key.tab)) {
-      rootPicker.open = true;
-      rootPicker.selectedIndex = activeAnchorIndex;
+    if (!browser.searchMode && rootAnchors.length > 1 && (matchesKey(data, Key.tab) || matchesKey(data, "shift+tab"))) {
+      const direction = matchesKey(data, "shift+tab") ? -1 : 1;
+      switchAnchor((activeAnchorIndex + direction + rootAnchors.length) % rootAnchors.length);
       return;
     }
     const previewNavigation = /^\d$/.test(data) || matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u") || matchesKey(data, "w");

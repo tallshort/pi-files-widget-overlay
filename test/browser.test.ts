@@ -378,7 +378,7 @@ describe("file browser expanded changed view", () => {
     expect(shouldCaptureBrowsePosition(true, true)).toBe(false);
   });
 
-  it("switches roots through the Tab picker", async () => {
+  it("switches roots directly with Tab and Shift-Tab", async () => {
     const first = await createChangedRepository();
     const second = await createChangedRepository();
     const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
@@ -387,11 +387,10 @@ describe("file browser expanded changed view", () => {
     ]);
     await waitForScanComplete(browser);
     browser.handleInput("\t");
-    expect(browser.render(100).join("\n")).toContain("Select root");
-    browser.handleInput("\u001b[B");
-    browser.handleInput("\r");
     await waitFor(() => browser.getBrowsePosition().rootPath === second);
     expect(browser.getRootAnchor()).toEqual({ label: "Second", index: 2, count: 2 });
+    browser.handleInput("\u001b[Z");
+    await waitFor(() => browser.getBrowsePosition().rootPath === first);
   });
 
   it("sanitizes restore labels and reserves header room for scanning", () => {

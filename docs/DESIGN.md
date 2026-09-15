@@ -98,7 +98,7 @@ The command roots come directly from `/readfiles` arguments: `/readfiles` uses `
 
 ### Interaction and state
 
-In normal browser mode, `Tab` opens an in-overlay root picker rather than immediately cycling roots; `↑`/`↓` select, `Enter` confirms, and `Esc` cancels. The picker marks inaccessible roots without changing the active root. A single-root overlay leaves `Tab` as a no-op. The header adds a compact anchor badge only in multi-root mode, for example `Files — [API 2/3] /workspace/service-api`.
+In normal browser mode, `Tab` switches to the next root and `Shift-Tab` switches to the previous root. An unavailable root reports an error without changing the active root. A single-root overlay leaves both keys as no-ops. The header adds a compact anchor badge only in multi-root mode, for example `Files — [API 2/3] /workspace/service-api`.
 
 A root anchor differs from the current browsing root. `u` may still temporarily re-root to a parent directory, while `.` returns to the active anchor. Each anchor retains its directory and selected file only for the active overlay; switching back restores those locations but not viewer, scrolling, diff, selection, search, filtering, or expansion state. In multi-root mode, the extension bypasses `restoreBrowsePosition` entirely: it does not retain an active anchor, per-anchor position, or any other multi-root state after the overlay closes. The next invocation always starts at its command root. Existing single-root `restoreBrowsePosition` behavior remains unchanged.
 
