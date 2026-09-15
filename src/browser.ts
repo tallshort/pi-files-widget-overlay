@@ -510,7 +510,15 @@ export function createFileBrowser(
         restoreInitialPosition();
         return;
       }
-      if (!next.isDirectory) return;
+      if (!next.isDirectory) {
+        if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
+          pendingRestorePath = restoredDirectoryPath;
+          scanPendingRestorePath();
+        } else {
+          pendingRestorePath = null;
+        }
+        return;
+      }
       current = next;
     }
   }
