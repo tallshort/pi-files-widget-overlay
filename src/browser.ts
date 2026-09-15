@@ -456,7 +456,13 @@ export function createFileBrowser(
   function restoreInitialPosition(): boolean {
     if (!pendingRestorePath) return false;
     const node = browser.nodeByPath.get(pendingRestorePath);
-    if (!node) return false;
+    if (!node) {
+      if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath && !browser.scanState.isScanning && browser.scanState.mode !== "safe") {
+        pendingRestorePath = restoredDirectoryPath;
+        return restoreInitialPosition();
+      }
+      return false;
+    }
     for (let ancestor: FileNode | undefined = node; ancestor; ancestor = ancestor.parent) ancestor.expanded = true;
     refreshLists();
     const index = getDisplayList().findIndex(item => item.node.path === pendingRestorePath);
@@ -1137,7 +1143,8 @@ export function createFileBrowser(
     activeAnchorIndex = index;
     initialRoot = anchor.path;
     rootPicker.open = false;
-    setRoot(anchor.path, anchorLocations.get(anchor.id));
+    const savedLocation = anchorLocations.get(anchor.id);
+    setRoot(savedLocation?.rootPath ?? anchor.path, savedLocation);
   }
 
   function setRoot(newRoot: string, restoreLocation?: RootLocation): void {
@@ -1384,9 +1391,12 @@ export function createFileBrowser(
     return lines;
   }
   function renderRootPicker(width: number): string[] {
-    const lines = [theme.fg("accent", "Select root"), theme.fg("borderMuted", "─".repeat(width))];
-    for (let index = 0; index < rootAnchors.length; index++) {
-      const anchor = rootAnchors[index];
+    const maxRoots = Math.max(1, browser.browserHeight - 5);
+    const start = Math.max(0, Math.min(rootPicker.selectedIndex - Math.floor(maxRoots / 2), rootAnchors.length - maxRoots));
+    const visibleAnchors = rootAnchors.slice(start, start + maxRoots);
+    const lines = [theme.fg("accent", `Select root (${rootPicker.selectedIndex + 1}/${rootAnchors.length})`), theme.fg("borderMuted", "─".repeat(width))];
+    for (const [offset, anchor] of visibleAnchors.entries()) {
+      const index = start + offset;
       const available = getPathInfoSync(anchor.path).isDirectory;
       const marker = index === rootPicker.selectedIndex ? "›" : " ";
       const current = index === activeAnchorIndex ? " (current)" : "";
