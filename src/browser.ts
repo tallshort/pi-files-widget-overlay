@@ -318,7 +318,7 @@ export function createFileBrowser(
   let activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
   const anchorLocations = new Map<string, RootLocation>();
   const rootPicker: RootPickerState = { open: false, selectedIndex: activeAnchorIndex };
-  let initialRoot = rootAnchors[activeAnchorIndex]?.path ?? rootPath;
+  let initialRoot = rootPath;
   let usesGitTree = false;
   let gitStatus = new Map<string, string>();
   let diffStats = new Map<string, DiffStats>();
@@ -1430,12 +1430,13 @@ export function createFileBrowser(
 
     lines.push(theme.fg("borderMuted", "─".repeat(width)));
     const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
+    const rootsHelp = rootAnchors.length > 1 ? "  Tab: roots" : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  y: copy path  ?: help") + changedIndicator;
+      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  y: copy path  ?: help" + rootsHelp) + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height") + changedIndicator,
+      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height" + rootsHelp) + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
