@@ -890,6 +890,7 @@ describe("file browser expanded changed view", () => {
       browser.handleInput("j");
       browser.handleInput("\r");
       await waitFor(() => browser.render(100).join("\n").includes("Unable to scan blocked"));
+      expect(browser.getActivityLabel()).toContain("⚠ Unable to scan blocked");
 
       vi.useFakeTimers();
       browser.handleInput("@");
