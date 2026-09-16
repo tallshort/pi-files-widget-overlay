@@ -1216,7 +1216,7 @@ export function createFileBrowser(
     requestRender();
   }
 
-  loadRoot(initialRoot);
+  loadRoot(rootPath);
 
   function getDisplayList(): FlatNode[] {
     let list = browser.searchQuery ? browser.fullList : browser.flatList;
