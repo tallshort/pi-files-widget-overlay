@@ -311,7 +311,7 @@ export function createFileBrowser(
 
   let rootPath = resolve(initialPath);
   let repo = false;
-  let activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
+  let activeAnchorIndex = rootAnchors.length > 1 ? 0 : Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
   const anchorLocations = new Map<string, RootLocation>();
   let initialRoot = rootAnchors.length > 1 ? rootAnchors[activeAnchorIndex]?.path ?? rootPath : rootPath;
   let usesGitTree = false;

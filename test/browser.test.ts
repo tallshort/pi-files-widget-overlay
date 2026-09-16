@@ -403,7 +403,7 @@ describe("file browser expanded changed view", () => {
   it("returns from a restored multi-root location to the first anchor with dot", async () => {
     const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-restored-root-"));
     const first = join(parent, "first");
-    const second = await createChangedRepository();
+    const second = parent;
     directories.push(parent);
     await mkdir(first);
     const browser = createFileBrowser(parent, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
@@ -411,6 +411,7 @@ describe("file browser expanded changed view", () => {
       { id: second, path: second, label: "Second" },
     ]);
     await waitFor(() => browser.getBrowsePosition().rootPath === parent);
+    expect(browser.getRootAnchor()).toEqual({ label: "First", index: 1, count: 2 });
     browser.handleInput(".");
     await waitFor(() => browser.getBrowsePosition().rootPath === first);
   });
