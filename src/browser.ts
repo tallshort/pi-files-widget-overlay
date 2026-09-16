@@ -1448,10 +1448,11 @@ export function createFileBrowser(
     const rootsHelp = rootAnchors.length > 1 ? "  Tab/Shift-Tab: roots" : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  ?: help  /: name  @: content  *: pin  .: root  p: preview  y: copy path" + rootsHelp) + changedIndicator;
+      : theme.fg("dim", "j/k/↑/↓: move  Enter/l: open  h: back  /: filter  c/C: changes  ?: help") + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-      theme.fg("dim", "C: expand  []: change  /:@ search  *: pin  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height" + rootsHelp) + changedIndicator,
+      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  p: preview  u: parent  .: root"),
+      theme.fg("dim", "*: pin/unpin  q/Esc: close  ?: hide  +/-: height" + rootsHelp) + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
@@ -1559,7 +1560,7 @@ export function createFileBrowser(
       const maximumHeight = getResponsivePanelHeight(
         MAX_BROWSER_HEIGHT,
         MAX_BROWSER_HEIGHT,
-        showFullHelp ? 10 : 9,
+        showFullHelp ? 11 : 9,
         process.stdout.rows,
         OVERLAY_MAX_HEIGHT_RATIO
       );
@@ -1667,7 +1668,7 @@ export function createFileBrowser(
       const maximumHeight = getResponsivePanelHeight(
         MAX_BROWSER_HEIGHT,
         MAX_BROWSER_HEIGHT,
-        showFullHelp ? 10 : 9,
+        showFullHelp ? 11 : 9,
         process.stdout.rows,
         OVERLAY_MAX_HEIGHT_RATIO
       );
@@ -1721,7 +1722,7 @@ export function createFileBrowser(
       previewPath = null;
     }
 
-    const footerLineCount = !browser.searchMode && showFullHelp ? 3 : 2;
+    const footerLineCount = !browser.searchMode && showFullHelp ? 4 : 2;
     const treeLines = renderBrowser(treeWidth);
     const treeContent = treeLines.slice(0, -footerLineCount);
     const fullWidthFooter = renderBrowser(width).slice(-footerLineCount);

@@ -152,13 +152,15 @@ describe("file browser expanded changed view", () => {
     expect(browser.isPathCopied()).toBe(true);
   });
 
-  it("shows the path-copy shortcut in the default browser help", async () => {
+  it("keeps advanced shortcuts out of the default browser help", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
     await waitForScanComplete(browser);
 
     const help = browser.render(160).at(-1) ?? "";
-    expect(help).toContain("y: copy path");
+    expect(help).toContain("?: help");
+    expect(help).not.toContain("y: copy path");
+    expect(help).not.toContain("*: pin");
     expect(help).not.toContain("q: close");
   });
   it("keeps top-level directories with only deep tracked paths", async () => {
@@ -670,21 +672,21 @@ describe("file browser expanded changed view", () => {
     const wide = browser.render(100);
     expect(wide.join("\n")).toContain("Directory selected - expand it in the file tree instead of opening it.");
     expect(wide.some(line => line.includes("│"))).toBe(true);
-    expect(wide.at(-1)).toContain("c/C: changes");
-    expect(wide.at(-1)).toContain("[]: prev/next change");
+    expect(wide.at(-1)).toContain("j/k/↑/↓: move");
     expect(wide.at(-1)).toContain("?: help");
-    expect(wide.at(-1)).toContain(".: root");
+    expect(wide.at(-1)).not.toContain("*: pin");
     expect(wide.at(-1)).not.toContain("│");
     browser.handleInput("?");
-    const fullHelp = browser.render(100).slice(-2).join("\n");
+    const fullHelp = browser.render(100).slice(-3).join("\n");
     expect(fullHelp).toContain("j/k/↑/↓: move");
     expect(fullHelp).toContain("Enter: open");
     expect(fullHelp).toContain("h/l←→: folder");
     expect(fullHelp).toContain("c: changed only");
+    expect(fullHelp).toContain("*: pin/unpin");
     expect(fullHelp).toContain("?: hide");
     expect(fullHelp).toContain("q/Esc: close");
-    const narrowHelp = browser.render(24).slice(-2);
-    expect(narrowHelp).toHaveLength(2);
+    const narrowHelp = browser.render(24).slice(-3);
+    expect(narrowHelp).toHaveLength(3);
     expect(narrowHelp.every(line => visibleWidth(line) <= 24)).toBe(true);
     browser.handleInput("?");
     expect(browser.render(100).at(-1)).toContain("?: help");
