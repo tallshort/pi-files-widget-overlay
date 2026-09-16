@@ -184,10 +184,10 @@ export default function editorExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const cwd = ctx.cwd;
       const requestedPaths = parseReadfilesPaths(args);
-      const pinnedRoots = requestedPaths.length === 0 ? readPinnedRoots(cwd) : [];
+      const pinnedRoots = readPinnedRoots(cwd);
       const accessiblePinnedRoots = pinnedRoots.filter(isAccessibleDirectory);
       if (pinnedRoots.length > accessiblePinnedRoots.length) ctx.ui.notify("Some pinned roots are unavailable", "warning");
-      const commandPaths = requestedPaths.length > 0 ? requestedPaths : [cwd, ...accessiblePinnedRoots];
+      const commandPaths = requestedPaths.length > 0 ? [...requestedPaths, ...accessiblePinnedRoots] : [cwd, ...accessiblePinnedRoots];
       const hasExplicitPath = requestedPaths.length > 0;
       const primary = resolveInitialPath(commandPaths[0], cwd);
       if (primary.error) {
@@ -249,7 +249,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
               const pinned = pins.includes(path);
               const nextPins = pinned ? pins.filter(root => root !== path) : [...pins, path];
               writePinnedRoots(nextPins);
-              const roots = requestedPaths.length > 0 ? rootAnchors : createRootAnchors([cwd, ...nextPins.filter(isAccessibleDirectory)]);
+              const roots = createRootAnchors([...(requestedPaths.length > 0 ? requestedPaths : [cwd]), ...nextPins.filter(isAccessibleDirectory)]);
               return { anchors: roots, message: `${pinned ? "Unpinned" : "Pinned"}: ${sanitizeTerminalLabel(path)}` };
             },
           }

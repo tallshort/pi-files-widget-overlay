@@ -114,7 +114,7 @@ Browse-position restoration is disabled by default. To restore the last selected
 }
 ```
 
-The extension reads this setting but never writes it. Each single-root command root keeps an independent memory-only browsing position: `/readfiles` and equivalent resolved paths restore their own last position. An explicit single `/readfiles <path>` starts at that path, while a multi-root command may restore a valid record for its first root but never saves multi-root state on close. Equivalent path spellings share a normalized absolute-path record.
+The extension reads this setting but never writes it. Each single-root command root keeps an independent memory-only browsing position: `/readfiles` and equivalent resolved paths restore their own last position. An explicit single `/readfiles <path>` starts at that path. Accessible pinned roots are appended to every command's root list after explicit paths (with normalized-path de-duplication), while multi-root state is never saved on close. Equivalent path spellings share a normalized absolute-path record.
 
 ### Multi-root commands
 

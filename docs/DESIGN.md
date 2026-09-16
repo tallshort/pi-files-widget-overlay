@@ -94,7 +94,7 @@ type RootAnchor = {
 };
 ```
 
-Command roots normally come directly from `/readfiles` arguments: `/readfiles <path...>` accepts whitespace-separated roots and quoted paths, resolving them relative to `ctx.cwd`. Without explicit paths, `/readfiles` uses `ctx.cwd` first and appends accessible, user-pinned roots from global `piFilesWidgetOverlay.pinnedRoots`; inaccessible pins remain stored but are skipped with a notice. Pins are normalized absolute user-visible paths and do not resolve symlink targets. The first root is initially active; duplicate labels include parent segments.
+Command roots come directly from `/readfiles` arguments: `/readfiles <path...>` accepts whitespace-separated roots and quoted paths, resolving them relative to `ctx.cwd`. Every command appends accessible user-pinned roots from global `piFilesWidgetOverlay.pinnedRoots` after its command roots; without explicit paths, `ctx.cwd` is the first command root. Paths are normalized and de-duplicated, inaccessible pins remain stored but are skipped with a notice, and pins do not resolve symlink targets. The first command root is initially active; duplicate labels include parent segments.
 
 ### Interaction and state
 
