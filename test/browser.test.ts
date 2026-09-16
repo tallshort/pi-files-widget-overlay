@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
+import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, hasMultipleDistinctCommandRoots, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -390,6 +390,8 @@ describe("file browser expanded changed view", () => {
     expect(shouldRestoreBrowsePosition(true, true, true)).toBe(true);
     expect(shouldRestoreBrowsePosition(true, true, false)).toBe(false);
     expect(shouldRestoreBrowsePosition(false, true, true)).toBe(false);
+    expect(hasMultipleDistinctCommandRoots(["/workspace/src", "/workspace/src/"])).toBe(false);
+    expect(hasMultipleDistinctCommandRoots(["/workspace/src", "/workspace/test"])).toBe(true);
   });
 
   it("keys independent single-root positions by normalized command root", () => {

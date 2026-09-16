@@ -96,6 +96,10 @@ export function getCommandRootKey(path: string): string {
   return resolve(path);
 }
 
+export function hasMultipleDistinctCommandRoots(paths: string[]): boolean {
+  return new Set(paths.map(getCommandRootKey)).size > 1;
+}
+
 
 export function getOverlayPathWidths(innerWidth: number, prefixWidth: number, activity: string, hasRestorePath: boolean): { availableWidth: number; rootWidth: number } {
   const activityWidth = activity ? visibleWidth(` ${activity}`) : 0;
@@ -199,9 +203,10 @@ export default function editorExtension(pi: ExtensionAPI): void {
       const resolved = primary;
       const rootAnchors = createRootAnchors([primary.path, ...commandPaths.slice(1).map(path => resolveCommandPath(path, cwd))], accessiblePinnedRoots);
       const multiRoot = rootAnchors.length > 1;
+      const hasMultipleCommandRoots = hasMultipleDistinctCommandRoots(commandRoots);
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
-      const restored = shouldRestoreBrowsePosition(restoreBrowsePosition, hasExplicitPath, commandRoots.length > 1) && restoredPosition
+      const restored = shouldRestoreBrowsePosition(restoreBrowsePosition, hasExplicitPath, hasMultipleCommandRoots) && restoredPosition
         ? resolveRestoredPosition(resolved.path, restoredPosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
