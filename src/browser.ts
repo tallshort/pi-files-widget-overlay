@@ -380,6 +380,8 @@ export function createFileBrowser(
   let contentSearchGeneration = 0;
   let contentSearchAbort: AbortController | null = null;
   let contentSearchTimer: ReturnType<typeof setTimeout> | null = null;
+  let noticeMessage: string | null = null;
+  let noticeTimer: ReturnType<typeof setTimeout> | null = null;
   let errorTimer: ReturnType<typeof setTimeout> | null = null;
   const grepTools = new Map<string, ReturnType<typeof createGrepTool>>();
   const normalizeGitPath = (path: string): string => path.split(sep).join("/");
@@ -445,6 +447,7 @@ export function createFileBrowser(
     const labels: string[] = [];
     if (browser.scanState.isScanning) labels.push("… scanning");
     if (browser.errorMessage) labels.push(`⚠ ${browser.errorMessage}`);
+    if (noticeMessage) labels.push(noticeMessage);
     return labels;
   }
 
@@ -612,6 +615,17 @@ export function createFileBrowser(
     errorTimer = setTimeout(() => {
       browser.errorMessage = null;
       errorTimer = null;
+      requestRender();
+    }, 3000);
+    requestRender();
+  }
+
+  function reportNotice(message: string): void {
+    noticeMessage = message;
+    if (noticeTimer) clearTimeout(noticeTimer);
+    noticeTimer = setTimeout(() => {
+      noticeMessage = null;
+      noticeTimer = null;
       requestRender();
     }, 3000);
     requestRender();
@@ -1557,7 +1571,7 @@ export function createFileBrowser(
             ? result.anchors
             : [...result.anchors, activeAnchor];
           activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
-          reportError(result.message);
+          reportNotice(result.message);
         }).catch(error => reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`));
       }
       return;
