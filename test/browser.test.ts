@@ -435,17 +435,17 @@ describe("file browser expanded changed view", () => {
   it("discards a superseded pin update", async () => {
     const first = await createChangedRepository();
     const second = await createChangedRepository();
-    const pending: Array<(value: { anchors: Array<{ id: string; path: string; label: string }>; message: string }) => void> = [];
+    const pending: Array<{ resolve: (value: { anchors: Array<{ id: string; path: string; label: string }>; message: string }) => void; reject: (error: Error) => void }> = [];
     const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [{ id: first, path: first, label: "First" }], {
-      togglePinnedRoot: () => new Promise(resolve => pending.push(resolve)),
+      togglePinnedRoot: () => new Promise((resolve, reject) => pending.push({ resolve, reject })),
     });
     await waitForScanComplete(browser);
     browser.handleInput("*");
     browser.handleInput("*");
     await waitFor(() => pending.length === 2);
-    pending[1]({ anchors: [{ id: second, path: second, label: "Second" }], message: "Newest" });
+    pending[1].resolve({ anchors: [{ id: second, path: second, label: "Second" }], message: "Newest" });
     await waitFor(() => browser.getActivityLabel() === "Newest");
-    pending[0]({ anchors: [{ id: first, path: first, label: "First" }], message: "Old" });
+    pending[0].reject(new Error("old failure"));
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(browser.getActivityLabel()).toBe("Newest");
     expect(browser.getRootAnchor()).toEqual({ label: "First", index: 2, count: 2 });
