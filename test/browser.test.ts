@@ -465,6 +465,7 @@ describe("file browser expanded changed view", () => {
     pending[0]({ anchors: [{ id: first, path: first, label: "First" }], message: "Old" });
     await new Promise(resolve => setTimeout(resolve, 20));
     expect(browser.getActivityLabel()).toBe("Newest");
+    expect(browser.getRootAnchor()).toEqual({ label: "First", index: 2, count: 2 });
   });
 
   it("returns from a restored multi-root location to the first anchor with dot", async () => {
