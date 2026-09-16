@@ -313,7 +313,7 @@ export function createFileBrowser(
   let repo = false;
   let activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === rootPath));
   const anchorLocations = new Map<string, RootLocation>();
-  let initialRoot = rootPath;
+  let initialRoot = rootAnchors.length > 1 ? rootAnchors[activeAnchorIndex]?.path ?? rootPath : rootPath;
   let usesGitTree = false;
   let gitStatus = new Map<string, string>();
   let diffStats = new Map<string, DiffStats>();
