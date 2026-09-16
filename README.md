@@ -113,7 +113,7 @@ Browse-position restoration is disabled by default. To restore the last selected
 }
 ```
 
-The extension reads this setting but never writes it. Each single-root command root keeps an independent memory-only browsing position: `/readfiles`, `/readfiles <path>`, and another resolved path restore only their own last position. Equivalent path spellings share a normalized absolute-path record. Multi-root browsing does not retain positions after the Overlay closes.
+The extension reads this setting but never writes it. Each single-root command root keeps an independent memory-only browsing position: `/readfiles` and equivalent resolved paths restore their own last position. An explicit single `/readfiles <path>` starts at that path, while a multi-root command may restore a valid record for its first root but never saves multi-root state on close. Equivalent path spellings share a normalized absolute-path record.
 
 ### Multi-root commands
 
@@ -123,7 +123,7 @@ Pass roots directly to the command, separated by whitespace; quote paths contain
 /readfiles ./src ./test
 /readfiles "./my src" "./my test"
 ```
-The first path must be accessible and is the initial root. Press `Tab` or `Shift-Tab` to switch roots. Selecting an inaccessible secondary path reports it as unavailable. Multi-root root selection and locations exist only while the Overlay is open; `restoreBrowsePosition` remains a single-root-only feature.
+The first path must be accessible and is the initial root. Press `Tab` or `Shift-Tab` to switch roots. Selecting an inaccessible secondary path reports it as unavailable. Multi-root root selection and locations exist only while the Overlay is open; a valid existing browse record for the first root may initialize that root, but multi-root state is never saved on close.
 ## Notes and edge cases
 
 - The overlay is centered at 95% of terminal width with a one-cell margin. Its maximum height is 95% of the terminal; panels start at 85% and `+` / `-` adjust within that limit.

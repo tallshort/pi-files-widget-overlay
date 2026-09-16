@@ -57,6 +57,10 @@ export function createRootAnchors(paths: string[]): RootAnchorConfig[] {
     return anchors;
   }, []);
 }
+export function shouldRestoreBrowsePosition(restoreEnabled: boolean, hasExplicitPath: boolean, multiRoot: boolean): boolean {
+  return restoreEnabled && (!hasExplicitPath || multiRoot);
+}
+
 export function shouldCaptureBrowsePosition(restoreEnabled: boolean, multiRoot: boolean): boolean {
   return restoreEnabled && !multiRoot;
 }
@@ -154,6 +158,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const cwd = ctx.cwd;
       const requestedPaths = parseReadfilesPaths(args);
+      const hasExplicitPath = requestedPaths.length > 0;
       const primary = resolveInitialPath(requestedPaths[0], cwd);
       if (primary.error) {
         ctx.ui.notify(sanitizeTerminalLabel(primary.error), "error");
@@ -164,7 +169,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
-      const restored = restoreBrowsePosition && !multiRoot && restoredPosition
+      const restored = shouldRestoreBrowsePosition(restoreBrowsePosition, hasExplicitPath, multiRoot) && restoredPosition
         ? resolveRestoredPosition(resolved.path, restoredPosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
