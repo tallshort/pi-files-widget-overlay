@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this extension will be documented in this file.
+## [0.8.0] - 2026-09-15
+
+### Added
+- Pin or unpin default `/readfiles` roots with `*`; pinned roots persist in global Pi settings, and `Tab` / `Shift-Tab` immediately include them.
+- Show a transient warning when stored pinned roots are unavailable.
+
+### Changed
+- Preserve the active root for the current Overlay after unpinning it, while removing it from future default root lists.
+
 
 ## [0.7.0] - 2026-09-15
 
