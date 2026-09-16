@@ -400,6 +400,20 @@ describe("file browser expanded changed view", () => {
     await waitFor(() => browser.getBrowsePosition().rootPath === first);
   });
 
+  it("returns from a restored multi-root location to the first anchor with dot", async () => {
+    const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-restored-root-"));
+    const first = join(parent, "first");
+    const second = await createChangedRepository();
+    directories.push(parent);
+    await mkdir(first);
+    const browser = createFileBrowser(parent, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
+      { id: first, path: first, label: "First" },
+      { id: second, path: second, label: "Second" },
+    ]);
+    await waitFor(() => browser.getBrowsePosition().rootPath === parent);
+    browser.handleInput(".");
+    await waitFor(() => browser.getBrowsePosition().rootPath === first);
+  });
   it("sanitizes restore labels and reserves header room for scanning", () => {
     expect(sanitizeRestorePathLabel("safe\u001b[31mname")).toBe("safe�[31mname");
     expect(getOverlayPathWidths(40, 10, "… scanning", true)).toEqual({ availableWidth: 18, rootWidth: 9 });
