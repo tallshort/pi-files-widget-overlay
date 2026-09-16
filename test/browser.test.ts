@@ -432,6 +432,25 @@ describe("file browser expanded changed view", () => {
     await waitFor(() => browser.getBrowsePosition().rootPath === second);
   });
 
+  it("discards a superseded pin update", async () => {
+    const first = await createChangedRepository();
+    const second = await createChangedRepository();
+    const pending: Array<(value: { anchors: Array<{ id: string; path: string; label: string }>; message: string }) => void> = [];
+    const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [{ id: first, path: first, label: "First" }], {
+      togglePinnedRoot: () => new Promise(resolve => pending.push(resolve)),
+    });
+    await waitForScanComplete(browser);
+    browser.handleInput("*");
+    browser.handleInput("*");
+    await waitFor(() => pending.length === 2);
+    pending[1]({ anchors: [{ id: second, path: second, label: "Second" }], message: "Newest" });
+    await waitFor(() => browser.getActivityLabel() === "Newest");
+    pending[0]({ anchors: [{ id: first, path: first, label: "First" }], message: "Old" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    expect(browser.getActivityLabel()).toBe("Newest");
+    expect(browser.getRootAnchor()).toEqual({ label: "First", index: 2, count: 2 });
+  });
+
   it("returns from a restored multi-root location to the first anchor with dot", async () => {
     const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-restored-root-"));
     const first = join(parent, "first");
