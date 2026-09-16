@@ -426,6 +426,8 @@ describe("file browser expanded changed view", () => {
     await waitFor(() => toggledPath !== undefined && browser.getRootAnchor()?.label === "First");
     expect(toggledPath).toBe(first);
     expect(browser.getRootAnchor()).toEqual({ label: "First", index: 2, count: 2 });
+    expect(browser.getActivityLabel()).toBe("Unpinned");
+    expect(browser.render(100).join("\n")).not.toContain("Unpinned");
     browser.handleInput("\t");
     await waitFor(() => browser.getBrowsePosition().rootPath === second);
   });

@@ -893,6 +893,11 @@ export function createFileBrowser(
       clearTimeout(errorTimer);
       errorTimer = null;
     }
+    noticeMessage = null;
+    if (noticeTimer) {
+      clearTimeout(noticeTimer);
+      noticeTimer = null;
+    }
     if (lineCountTimer) {
       clearTimeout(lineCountTimer);
       lineCountTimer = null;
