@@ -29,6 +29,8 @@ import { createTextInputBuffer } from "./input-utils";
 
 const MIN_PREVIEW_WIDTH = 80;
 const CONTENT_SEARCH_DEBOUNCE_MS = 150;
+const COMPACT_BROWSER_CHROME_ROWS = 9;
+const FULL_BROWSER_CHROME_ROWS = 11;
 
 export interface BrowserController {
   getRootPath(): string;
@@ -358,7 +360,7 @@ export function createFileBrowser(
     focusFirstChildOf: null,
     errorMessage: null,
     contentSearchError: null,
-    browserHeight: getResponsivePanelHeight(DEFAULT_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, 9),
+    browserHeight: getResponsivePanelHeight(DEFAULT_BROWSER_HEIGHT, MAX_BROWSER_HEIGHT, COMPACT_BROWSER_CHROME_ROWS),
     lastPollTime: Date.now(),
   };
 
@@ -1560,7 +1562,7 @@ export function createFileBrowser(
       const maximumHeight = getResponsivePanelHeight(
         MAX_BROWSER_HEIGHT,
         MAX_BROWSER_HEIGHT,
-        showFullHelp ? 11 : 9,
+        showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
         process.stdout.rows,
         OVERLAY_MAX_HEIGHT_RATIO
       );
@@ -1668,7 +1670,7 @@ export function createFileBrowser(
       const maximumHeight = getResponsivePanelHeight(
         MAX_BROWSER_HEIGHT,
         MAX_BROWSER_HEIGHT,
-        showFullHelp ? 11 : 9,
+        showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
         process.stdout.rows,
         OVERLAY_MAX_HEIGHT_RATIO
       );
