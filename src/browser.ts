@@ -52,6 +52,7 @@ export interface RootAnchor {
   id: string;
   path: string;
   label: string;
+  transient?: boolean;
 }
 
 interface RootLocation {
@@ -1206,7 +1207,8 @@ export function createFileBrowser(
       return;
     }
     anchorLocations.set(rootAnchors[activeAnchorIndex].id, currentLocation());
-    activeAnchorIndex = index;
+    rootAnchors = rootAnchors.filter(candidate => !candidate.transient || candidate.id === anchor.id);
+    activeAnchorIndex = rootAnchors.findIndex(candidate => candidate.id === anchor.id);
     initialRoot = anchor.path;
     const savedLocation = anchorLocations.get(anchor.id);
     setRoot(savedLocation?.rootPath ?? anchor.path, savedLocation);
@@ -1578,7 +1580,7 @@ export function createFileBrowser(
           if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
           rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
             ? result.anchors
-            : [...result.anchors, activeAnchor];
+            : [...result.anchors, { ...activeAnchor, transient: true }];
           activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
           reportNotice(result.message);
         }).catch(error => {

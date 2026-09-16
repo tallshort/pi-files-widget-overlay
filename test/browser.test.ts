@@ -430,6 +430,7 @@ describe("file browser expanded changed view", () => {
     expect(browser.render(100).join("\n")).not.toContain("Unpinned");
     browser.handleInput("\t");
     await waitFor(() => browser.getBrowsePosition().rootPath === second);
+    expect(browser.getRootAnchor()).toBeNull();
   });
 
   it("discards a superseded pin update", async () => {
