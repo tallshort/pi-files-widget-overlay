@@ -201,7 +201,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
-      const restored = shouldRestoreBrowsePosition(restoreBrowsePosition, hasExplicitPath, multiRoot) && restoredPosition
+      const restored = shouldRestoreBrowsePosition(restoreBrowsePosition, hasExplicitPath, commandRoots.length > 1) && restoredPosition
         ? resolveRestoredPosition(resolved.path, restoredPosition)
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;

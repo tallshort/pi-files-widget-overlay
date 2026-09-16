@@ -376,8 +376,15 @@ describe("file browser expanded changed view", () => {
     expect(readPinnedRoots("/workspace", settings)).toEqual(["/workspace/src"]);
     writePinnedRoots(["/workspace/docs", "/workspace/docs"], settings);
     expect(JSON.parse(await readFile(settings, "utf-8"))).toEqual({ theme: "dark", piFilesWidgetOverlay: { restoreBrowsePosition: true, pinnedRoots: ["/workspace/docs"] } });
-  });
 
+    await writeFile(settings, "{ malformed");
+    expect(() => writePinnedRoots(["/workspace/other"], settings)).toThrow();
+    expect(await readFile(settings, "utf-8")).toBe("{ malformed");
+
+    const missing = join(settingsDirectory, "missing.json");
+    writePinnedRoots(["/workspace/new"], missing);
+    expect(JSON.parse(await readFile(missing, "utf-8"))).toEqual({ piFilesWidgetOverlay: { pinnedRoots: ["/workspace/new"] } });
+  });
   it("restores the first root for default and multi-root commands only", () => {
     expect(shouldRestoreBrowsePosition(true, false, false)).toBe(true);
     expect(shouldRestoreBrowsePosition(true, true, true)).toBe(true);
