@@ -32,7 +32,7 @@ const CONTENT_SEARCH_DEBOUNCE_MS = 150;
 
 export interface BrowserController {
   getRootPath(): string;
-  getRootAnchor(): { label: string; index: number; count: number } | null;
+  getRootAnchor(): { label: string; pinned?: boolean; index: number; count: number } | null;
   getActivityLabel(): string;
   getRestorePath(): string | null;
   isPathCopied(): boolean;
@@ -52,6 +52,7 @@ export interface RootAnchor {
   id: string;
   path: string;
   label: string;
+  pinned?: boolean;
   transient?: boolean;
 }
 
@@ -1739,10 +1740,10 @@ export function createFileBrowser(
     getRootPath(): string {
       return formatRootPath(rootPath);
     },
-    getRootAnchor(): { label: string; index: number; count: number } | null {
+    getRootAnchor(): { label: string; pinned?: boolean; index: number; count: number } | null {
       if (rootAnchors.length < 2) return null;
       const anchor = rootAnchors[activeAnchorIndex];
-      return { label: anchor.label, index: activeAnchorIndex + 1, count: rootAnchors.length };
+      return { label: anchor.label, ...(anchor.pinned ? { pinned: true } : {}), index: activeAnchorIndex + 1, count: rootAnchors.length };
     },
     getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null } {
       const selected = getDisplayList()[browser.selectedIndex]?.node;

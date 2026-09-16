@@ -362,9 +362,9 @@ describe("file browser expanded changed view", () => {
     directories.push(root, sibling);
 
     expect(parseReadfilesPaths(`./src "${sibling}" ./test`)).toEqual(["./src", sibling, "./test"]);
-    expect(createRootAnchors([root, sibling])).toEqual([
+    expect(createRootAnchors([root, sibling], [sibling])).toEqual([
       { id: root, path: root, label: root.split("/").at(-1) },
-      { id: sibling, path: sibling, label: sibling.split("/").at(-1) },
+      { id: sibling, path: sibling, label: sibling.split("/").at(-1), pinned: true },
     ]);
   });
 

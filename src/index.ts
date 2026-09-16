@@ -50,13 +50,14 @@ export function parseReadfilesPaths(args: string | undefined): string[] {
   return paths;
 }
 
-export function createRootAnchors(paths: string[]): RootAnchorConfig[] {
+export function createRootAnchors(paths: string[], pinnedPaths: string[] = []): RootAnchorConfig[] {
   const uniquePaths = [...new Set(paths.map(path => resolve(path)))];
+  const pinned = new Set(pinnedPaths.map(path => resolve(path)));
   const labels = uniquePaths.map(path => basename(path) || path);
   for (let index = 0; index < uniquePaths.length; index++) {
     if (labels.filter(label => label === labels[index]).length > 1) labels[index] = `${basename(dirname(uniquePaths[index]))}/${labels[index]}`;
   }
-  return uniquePaths.map((path, index) => ({ id: path, path, label: labels[index] }));
+  return uniquePaths.map((path, index) => ({ id: path, path, label: labels[index], ...(pinned.has(path) ? { pinned: true } : {}) }));
 }
 
 export function readPinnedRoots(cwd: string, settingsPath = getRestoreBrowsePositionSettingsPath()): string[] {
@@ -195,7 +196,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
         return;
       }
       const resolved = primary;
-      const rootAnchors = createRootAnchors([primary.path, ...commandPaths.slice(1).map(path => resolveCommandPath(path, cwd))]);
+      const rootAnchors = createRootAnchors([primary.path, ...commandPaths.slice(1).map(path => resolveCommandPath(path, cwd))], accessiblePinnedRoots);
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
@@ -249,7 +250,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
               const pinned = pins.includes(path);
               const nextPins = pinned ? pins.filter(root => root !== path) : [...pins, path];
               writePinnedRoots(nextPins);
-              const roots = createRootAnchors([...(requestedPaths.length > 0 ? requestedPaths : [cwd]), ...nextPins.filter(isAccessibleDirectory)]);
+              const roots = createRootAnchors([...(requestedPaths.length > 0 ? requestedPaths : [cwd]), ...nextPins.filter(isAccessibleDirectory)], nextPins);
               return { anchors: roots, message: `${pinned ? "Unpinned" : "Pinned"}: ${sanitizeTerminalLabel(path)}` };
             },
           }
@@ -279,7 +280,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
           const copyHint = browser.isPathCopied() ? " Path copied" : "";
           const restoredPath = browser.getRestorePath();
           const rootAnchor = browser.getRootAnchor();
-          const anchorBadge = rootAnchor ? ` [${sanitizeTerminalLabel(rootAnchor.label)} ${rootAnchor.index}/${rootAnchor.count}]` : "";
+          const anchorBadge = rootAnchor
+            ? ` [${sanitizeTerminalLabel(rootAnchor.label)}${rootAnchor.pinned ? theme.fg("accent", "*") : ""} ${rootAnchor.index}/${rootAnchor.count}]`
+            : "";
           const prefix = theme.fg("accent", theme.bold(" Files ")) + theme.fg("dim", `—${anchorBadge} `);
           const safeRootPath = sanitizeRestorePathLabel(browser.getRootPath());
           const safeRestoredPath = restoredPath ? sanitizeRestorePathLabel(restoredPath) : null;
