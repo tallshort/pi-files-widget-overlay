@@ -375,6 +375,7 @@ export function createFileBrowser(
   // Also invalidate work when Git replaces the provisional filesystem tree at
   // the same root. Root generation alone cannot distinguish that transition.
   let treeGeneration = 0;
+  let pinRequestGeneration = 0;
   let gitRefreshGeneration: number | null = null;
   let gitAbort = new AbortController();
   let contentSearchGeneration = 0;
@@ -1572,15 +1573,16 @@ export function createFileBrowser(
         const path = selected.isDirectory ? selected.path : dirname(selected.path);
         const activeAnchor = rootAnchors[activeAnchorIndex];
         const generation = rootGeneration;
+        const requestGeneration = ++pinRequestGeneration;
         void options.togglePinnedRoot(path).then(result => {
-          if (generation !== rootGeneration) return;
+          if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
           rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
             ? result.anchors
             : [...result.anchors, activeAnchor];
           activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
           reportNotice(result.message);
         }).catch(error => {
-          if (generation === rootGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
+          if (generation === rootGeneration && requestGeneration === pinRequestGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
         });
       }
       return;
