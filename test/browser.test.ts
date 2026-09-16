@@ -415,7 +415,7 @@ describe("file browser expanded changed view", () => {
     const second = await createChangedRepository();
     let toggledPath: string | undefined;
     const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
-      { id: first, path: first, label: "First" },
+      { id: first, path: first, label: "First", pinned: true },
       { id: second, path: second, label: "Second" },
     ], { togglePinnedRoot: async path => { toggledPath = path; return { anchors: [{ id: second, path: second, label: "Second" }], message: "Unpinned" }; } });
     await waitForScanComplete(browser);

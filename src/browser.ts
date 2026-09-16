@@ -1581,7 +1581,7 @@ export function createFileBrowser(
           if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
           rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
             ? result.anchors
-            : [...result.anchors, { ...activeAnchor, transient: true }];
+            : [...result.anchors, { id: activeAnchor.id, path: activeAnchor.path, label: activeAnchor.label, transient: true }];
           activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
           reportNotice(result.message);
         }).catch(error => {
