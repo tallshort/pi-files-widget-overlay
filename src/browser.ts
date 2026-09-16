@@ -1571,13 +1571,17 @@ export function createFileBrowser(
       if (selected && options.togglePinnedRoot) {
         const path = selected.isDirectory ? selected.path : dirname(selected.path);
         const activeAnchor = rootAnchors[activeAnchorIndex];
+        const generation = rootGeneration;
         void options.togglePinnedRoot(path).then(result => {
+          if (generation !== rootGeneration) return;
           rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
             ? result.anchors
             : [...result.anchors, activeAnchor];
           activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
           reportNotice(result.message);
-        }).catch(error => reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`));
+        }).catch(error => {
+          if (generation === rootGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
+        });
       }
       return;
     }
