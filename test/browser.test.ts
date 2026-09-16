@@ -163,6 +163,21 @@ describe("file browser expanded changed view", () => {
     expect(help).not.toContain("*: pin");
     expect(help).not.toContain("q: close");
   });
+
+  it("shows root switching only in expanded multi-root help", async () => {
+    const first = await createChangedRepository();
+    const second = await createChangedRepository();
+    const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
+      { id: first, path: first, label: "First" },
+      { id: second, path: second, label: "Second" },
+    ]);
+    await waitForScanComplete(browser);
+
+    expect(browser.render(160).at(-1)).not.toContain("Tab/Shift-Tab: roots");
+    browser.handleInput("?");
+    expect(browser.render(160).slice(-3).join("\n")).toContain("Tab/Shift-Tab: roots");
+  });
+
   it("keeps top-level directories with only deep tracked paths", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
