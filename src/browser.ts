@@ -304,7 +304,7 @@ export function createFileBrowser(
   initialSelectedPath?: string,
   initialDirectoryPath?: string,
   rootAnchors: RootAnchor[] = [{ id: resolve(initialPath), path: resolve(initialPath), label: "." }],
-  options: { readDirectory?: (path: string) => Promise<Dirent[]> } = {}
+  options: { readDirectory?: (path: string) => Promise<Dirent[]>; togglePinnedRoot?: (path: string) => Promise<{ anchors: RootAnchor[]; message: string }> } = {}
 ): BrowserController {
   const ignored = getIgnoredNames();
   const readDirectory = options.readDirectory ?? (path => readdir(path, { withFileTypes: true }));
@@ -1425,10 +1425,10 @@ export function createFileBrowser(
     const rootsHelp = rootAnchors.length > 1 ? "  Tab/Shift-Tab: roots" : "";
     const help = browser.searchMode
       ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "c/C: changes  []: prev/next change  /: name  @: content  .: root  p: preview  y: copy path  ?: help" + rootsHelp) + changedIndicator;
+      : theme.fg("dim", "c/C: changes  []: prev/next change  ?: help  /: name  @: content  *: pin  .: root  p: preview  y: copy path" + rootsHelp) + changedIndicator;
     const fullHelp = [
       theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height" + rootsHelp) + changedIndicator,
+      theme.fg("dim", "C: expand  []: change  /:@ search  *: pin  y: copy path  q/Esc: close  ?: hide  u: parent  .: root  p: preview  +/-: height" + rootsHelp) + changedIndicator,
     ];
     if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
     else lines.push(truncateToWidth(help, width));
@@ -1545,6 +1545,21 @@ export function createFileBrowser(
     }
     if (matchesKey(data, "p")) {
       if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
+      return;
+    }
+    if (matchesKey(data, "*")) {
+      const selected = displayList[browser.selectedIndex]?.node;
+      if (selected && options.togglePinnedRoot) {
+        const path = selected.isDirectory ? selected.path : dirname(selected.path);
+        const activeAnchor = rootAnchors[activeAnchorIndex];
+        void options.togglePinnedRoot(path).then(result => {
+          rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
+            ? result.anchors
+            : [...result.anchors, activeAnchor];
+          activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
+          reportError(result.message);
+        }).catch(error => reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`));
+      }
       return;
     }
     if (matchesKey(data, "y")) {

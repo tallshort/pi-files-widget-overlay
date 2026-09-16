@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, mkdir, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -14,7 +14,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 }));
 import { createFileBrowser } from "../src/browser.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, parseReadfilesPaths, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition } from "../src/index.ts";
+import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -368,6 +368,16 @@ describe("file browser expanded changed view", () => {
     ]);
   });
 
+  it("reads and writes pinned roots without discarding settings", async () => {
+    const settingsDirectory = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-settings-"));
+    directories.push(settingsDirectory);
+    const settings = join(settingsDirectory, "settings.json");
+    await writeFile(settings, JSON.stringify({ theme: "dark", piFilesWidgetOverlay: { restoreBrowsePosition: true, pinnedRoots: ["./src", "./src"] } }));
+    expect(readPinnedRoots("/workspace", settings)).toEqual(["/workspace/src"]);
+    writePinnedRoots(["/workspace/docs", "/workspace/docs"], settings);
+    expect(JSON.parse(await readFile(settings, "utf-8"))).toEqual({ theme: "dark", piFilesWidgetOverlay: { restoreBrowsePosition: true, pinnedRoots: ["/workspace/docs"] } });
+  });
+
   it("restores the first root for default and multi-root commands only", () => {
     expect(shouldRestoreBrowsePosition(true, false, false)).toBe(true);
     expect(shouldRestoreBrowsePosition(true, true, true)).toBe(true);
@@ -398,6 +408,26 @@ describe("file browser expanded changed view", () => {
     expect(browser.getRootAnchor()).toEqual({ label: "Second", index: 2, count: 2 });
     browser.handleInput("\u001b[Z");
     await waitFor(() => browser.getBrowsePosition().rootPath === first);
+  });
+
+  it("keeps the active anchor after unpinning it", async () => {
+    const first = await createChangedRepository();
+    const second = await createChangedRepository();
+    let toggledPath: string | undefined;
+    const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
+      { id: first, path: first, label: "First" },
+      { id: second, path: second, label: "Second" },
+    ], { togglePinnedRoot: async path => { toggledPath = path; return { anchors: [{ id: second, path: second, label: "Second" }], message: "Unpinned" }; } });
+    await waitForScanComplete(browser);
+    browser.handleInput("j");
+    browser.handleInput("j");
+    browser.handleInput("j");
+    browser.handleInput("*");
+    await waitFor(() => toggledPath !== undefined && browser.getRootAnchor()?.label === "First");
+    expect(toggledPath).toBe(first);
+    expect(browser.getRootAnchor()).toEqual({ label: "First", index: 2, count: 2 });
+    browser.handleInput("\t");
+    await waitFor(() => browser.getBrowsePosition().rootPath === second);
   });
 
   it("returns from a restored multi-root location to the first anchor with dot", async () => {

@@ -94,11 +94,11 @@ type RootAnchor = {
 };
 ```
 
-The command roots come directly from `/readfiles` arguments: `/readfiles` uses `ctx.cwd`, while `/readfiles <path...>` accepts whitespace-separated roots. Single- and double-quoted paths preserve spaces. Paths resolve relative to `ctx.cwd`, support the existing `~` behavior, are normalized and deduplicated, and the first root is initially active. Global `roots` configuration is deliberately not supported.
+Command roots normally come directly from `/readfiles` arguments: `/readfiles <path...>` accepts whitespace-separated roots and quoted paths, resolving them relative to `ctx.cwd`. Without explicit paths, `/readfiles` uses `ctx.cwd` first and appends accessible, user-pinned roots from global `piFilesWidgetOverlay.pinnedRoots`; inaccessible pins remain stored but are skipped with a notice. Pins are normalized absolute user-visible paths and do not resolve symlink targets. The first root is initially active; duplicate labels include parent segments.
 
 ### Interaction and state
 
-In normal browser mode, `Tab` switches to the next root and `Shift-Tab` switches to the previous root. An unavailable root reports an error without changing the active root. A single-root overlay leaves both keys as no-ops. The header adds a compact anchor badge only in multi-root mode, for example `Files — [API 2/3] /workspace/service-api`.
+In normal browser mode, `Tab` switches to the next root and `Shift-Tab` switches to the previous root. `*` pins or unpins the selected directory (or selected file's parent), immediately updating default roots and showing a transient result. Unpinning the current root leaves it available only for the current overlay session. An unavailable root reports an error without changing the active root. A single-root overlay leaves Tab keys as no-ops. The header adds a compact anchor badge only in multi-root mode, for example `Files — [API 2/3] /workspace/service-api`.
 
 A root anchor differs from the current browsing root. `u` may still temporarily re-root to a parent directory, while `.` returns to the active anchor. Each anchor retains its directory and selected file only for the active overlay; switching back restores those locations but not viewer, scrolling, diff, selection, search, filtering, or expansion state. In multi-root mode, the extension may initialize the first anchor from a valid existing single-root browse record, but it does not retain an active anchor, per-anchor position, or any other multi-root state after the overlay closes. The next invocation without a valid first-root record starts at its command root. Existing explicit single-path behavior remains unchanged.
 

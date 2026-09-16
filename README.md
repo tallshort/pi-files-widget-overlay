@@ -63,6 +63,7 @@ npm run typecheck
 | `p` | Toggle the tree/preview split on wide terminals. |
 | `Tab` / `Shift-Tab` | Switch to the next / previous command-provided root when multiple distinct roots are provided. |
 | `y` | Copy the selected file or directory's absolute path. |
+| `*` | Pin/unpin the selected directory (or selected file's parent) for default `/readfiles` roots. |
 | `c` | Toggle changed-only view within the current search results. |
 | `C` | Toggle expanded changed view within the current search results. |
 | `[` / `]` | Previous/next changed file; when searching, stay within the current results. |

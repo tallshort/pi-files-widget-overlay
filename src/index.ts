@@ -7,7 +7,7 @@
 
 import { getAgentDir, isEditToolResult, isWriteToolResult, type ExtensionAPI } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { readFileSync, statSync } from "node:fs";
+import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
 import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
 
@@ -51,11 +51,37 @@ export function parseReadfilesPaths(args: string | undefined): string[] {
 }
 
 export function createRootAnchors(paths: string[]): RootAnchorConfig[] {
-  return paths.reduce<RootAnchorConfig[]>((anchors, input) => {
-    const path = resolve(input);
-    if (!anchors.some(anchor => anchor.path === path)) anchors.push({ id: path, path, label: basename(path) || path });
-    return anchors;
-  }, []);
+  const uniquePaths = [...new Set(paths.map(path => resolve(path)))];
+  const labels = uniquePaths.map(path => basename(path) || path);
+  for (let index = 0; index < uniquePaths.length; index++) {
+    if (labels.filter(label => label === labels[index]).length > 1) labels[index] = `${basename(dirname(uniquePaths[index]))}/${labels[index]}`;
+  }
+  return uniquePaths.map((path, index) => ({ id: path, path, label: labels[index] }));
+}
+
+export function readPinnedRoots(cwd: string, settingsPath = getRestoreBrowsePositionSettingsPath()): string[] {
+  try {
+    const settings: unknown = JSON.parse(readFileSync(settingsPath, "utf-8"));
+    const roots = settings && typeof settings === "object" && (settings as Record<string, unknown>).piFilesWidgetOverlay && typeof (settings as Record<string, unknown>).piFilesWidgetOverlay === "object"
+      ? ((settings as { piFilesWidgetOverlay: Record<string, unknown> }).piFilesWidgetOverlay.pinnedRoots)
+      : null;
+    return Array.isArray(roots) ? [...new Set(roots.filter((root): root is string => typeof root === "string").map(root => resolve(cwd, root)))] : [];
+  } catch { return []; }
+}
+
+export function writePinnedRoots(roots: string[], settingsPath = getRestoreBrowsePositionSettingsPath()): void {
+  let settings: Record<string, unknown> = {};
+  try {
+    settings = JSON.parse(readFileSync(settingsPath, "utf-8")) as Record<string, unknown>;
+    if (!settings || Array.isArray(settings)) throw new Error("Invalid settings");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code !== "ENOENT") throw error;
+  }
+  const namespace = settings.piFilesWidgetOverlay && typeof settings.piFilesWidgetOverlay === "object" && !Array.isArray(settings.piFilesWidgetOverlay)
+    ? settings.piFilesWidgetOverlay as Record<string, unknown>
+    : {};
+  settings.piFilesWidgetOverlay = { ...namespace, pinnedRoots: [...new Set(roots.map(root => resolve(root)))] };
+  writeFileSync(settingsPath, `${JSON.stringify(settings, null, 2)}\n`);
 }
 export function shouldRestoreBrowsePosition(restoreEnabled: boolean, hasExplicitPath: boolean, multiRoot: boolean): boolean {
   return restoreEnabled && (!hasExplicitPath || multiRoot);
@@ -158,14 +184,18 @@ export default function editorExtension(pi: ExtensionAPI): void {
     handler: async (args, ctx) => {
       const cwd = ctx.cwd;
       const requestedPaths = parseReadfilesPaths(args);
+      const pinnedRoots = requestedPaths.length === 0 ? readPinnedRoots(cwd) : [];
+      const accessiblePinnedRoots = pinnedRoots.filter(isAccessibleDirectory);
+      if (pinnedRoots.length > accessiblePinnedRoots.length) ctx.ui.notify("Some pinned roots are unavailable", "warning");
+      const commandPaths = requestedPaths.length > 0 ? requestedPaths : [cwd, ...accessiblePinnedRoots];
       const hasExplicitPath = requestedPaths.length > 0;
-      const primary = resolveInitialPath(requestedPaths[0], cwd);
+      const primary = resolveInitialPath(commandPaths[0], cwd);
       if (primary.error) {
         ctx.ui.notify(sanitizeTerminalLabel(primary.error), "error");
         return;
       }
       const resolved = primary;
-      const rootAnchors = createRootAnchors([primary.path, ...requestedPaths.slice(1).map(path => resolveCommandPath(path, cwd))]);
+      const rootAnchors = createRootAnchors([primary.path, ...commandPaths.slice(1).map(path => resolveCommandPath(path, cwd))]);
       const multiRoot = rootAnchors.length > 1;
       const commandRoot = getCommandRootKey(resolved.path);
       const restoredPosition = browsePositions.get(commandRoot) ?? null;
@@ -212,7 +242,17 @@ export default function editorExtension(pi: ExtensionAPI): void {
           cwd,
           initialSelectedPath,
           initialDirectoryPath,
-          rootAnchors
+          rootAnchors,
+          {
+            togglePinnedRoot: async path => {
+              const pins = readPinnedRoots(cwd);
+              const pinned = pins.includes(path);
+              const nextPins = pinned ? pins.filter(root => root !== path) : [...pins, path];
+              writePinnedRoots(nextPins);
+              const roots = requestedPaths.length > 0 ? rootAnchors : createRootAnchors([cwd, ...nextPins.filter(isAccessibleDirectory)]);
+              return { anchors: roots, message: `${pinned ? "Unpinned" : "Pinned"}: ${sanitizeTerminalLabel(path)}` };
+            },
+          }
         );
         if (shouldCaptureBrowsePosition(restoreBrowsePosition, multiRoot)) {
           captureBrowsePosition = () => {
