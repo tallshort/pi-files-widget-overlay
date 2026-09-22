@@ -69,7 +69,7 @@ export interface ViewerController {
   close(): void;
   render(width: number): string[];
   handleInput(data: string): ViewerAction;
-  copyPath(): void;
+  copyPath(onResult?: (success: boolean) => void): void;
   isPathCopied(): boolean;
 }
 
@@ -87,6 +87,7 @@ export function createViewer(
 ): ViewerController {
   const { getRoot, projectCwd, readOnly = false, requestRender } = config;
   let pathCopiedUntil = 0;
+  let copyErrorUntil = 0;
   let copyGeneration = 0;
   const searchInput = createTextInputBuffer();
   const commentInput = createTextInputBuffer({ preserveNewlines: true });
@@ -507,7 +508,11 @@ export function createViewer(
     if (!state.file) return "";
     const isUntracked = isUntrackedStatus(state.file.gitStatus);
 
-    const copyHint = Date.now() < pathCopiedUntil ? theme.fg("dim", " Path copied") : "";
+    const copyHint = Date.now() < pathCopiedUntil
+      ? theme.fg("dim", " Path copied")
+      : Date.now() < copyErrorUntil
+        ? theme.fg("error", " Unable to copy path")
+        : "";
     const fileNameWidth = Math.max(0, width - visibleWidth(copyHint));
     let header = theme.bold(theme.fg("text", truncateToWidth(sanitizeTerminalLabel(state.file.name), fileNameWidth, "…"))) + copyHint;
     if (isUntracked) {
@@ -624,16 +629,25 @@ export function createViewer(
     return lines;
   }
 
-  function copyPath(): void {
+  function copyPath(onResult?: (success: boolean) => void): void {
     const copiedPath = state.file?.path;
-    const generation = copyGeneration;
+    const generation = ++copyGeneration;
     if (!copiedPath) return;
     void copyToClipboard(copiedPath).then(() => {
       if (generation !== copyGeneration || state.file?.path !== copiedPath) return;
+      copyErrorUntil = 0;
       pathCopiedUntil = Date.now() + 3000;
+      onResult?.(true);
       requestRender?.();
       setTimeout(() => requestRender?.(), 3000);
-    }).catch(() => {});
+    }).catch(() => {
+      if (generation !== copyGeneration || state.file?.path !== copiedPath) return;
+      pathCopiedUntil = 0;
+      copyErrorUntil = Date.now() + 3000;
+      onResult?.(false);
+      requestRender?.();
+      setTimeout(() => requestRender?.(), 3000);
+    });
   }
 
   return {
@@ -649,6 +663,7 @@ export function createViewer(
 
     setFile(file: FileNode): void {
       pathCopiedUntil = 0;
+      copyErrorUntil = 0;
       copyGeneration += 1;
       state.file = file;
       state.scroll = 0;
@@ -668,6 +683,7 @@ export function createViewer(
     updateFileRef(file: FileNode | null): void {
       if (state.file?.path !== file?.path) {
         pathCopiedUntil = 0;
+        copyErrorUntil = 0;
         copyGeneration += 1;
       }
       state.file = file;
@@ -675,6 +691,7 @@ export function createViewer(
 
     close(): void {
       pathCopiedUntil = 0;
+      copyErrorUntil = 0;
       copyGeneration += 1;
       state.file = null;
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };

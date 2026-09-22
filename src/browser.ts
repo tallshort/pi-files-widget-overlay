@@ -1,4 +1,4 @@
-import { createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { lstatSync, realpathSync, statSync, type Dirent } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
@@ -38,6 +38,7 @@ export interface BrowserController {
   getActivityLabel(): string;
   getRestorePath(): string | null;
   isPathCopied(): boolean;
+  isPathCopyError(): boolean;
   render(width: number): string[];
   handleInput(data: string): void;
   getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null };
@@ -330,6 +331,10 @@ export function createFileBrowser(
   let lastRenderWidth = 0;
   let previewEnabled = true;
   let showFullHelp = false;
+  let pathCopiedUntil = 0;
+  let pathCopyErrorUntil = 0;
+  let copyGeneration = 0;
+  let copyFeedbackOwner: "browser" | "preview" | null = null;
   let pendingRestorePath = initialSelectedPath ? resolve(initialSelectedPath) : initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoredDirectoryPath = initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
@@ -1220,6 +1225,10 @@ export function createFileBrowser(
   function setRoot(newRoot: string, restoreLocation?: RootLocation): void {
     if (viewer.isOpen()) viewer.close();
     if (previewViewer.isOpen()) previewViewer.close();
+    copyGeneration += 1;
+    pathCopiedUntil = 0;
+    pathCopyErrorUntil = 0;
+    copyFeedbackOwner = null;
     previewPath = null;
     pendingRestorePath = restoreLocation?.selectedFilePath ?? restoreLocation?.directoryPath ?? null;
     restoredDirectoryPath = restoreLocation?.directoryPath ?? null;
@@ -1596,8 +1605,33 @@ export function createFileBrowser(
     if (matchesKey(data, "y")) {
       const selected = displayList[browser.selectedIndex]?.node;
       if (selected) {
-        previewViewer.setFile(selected);
-        previewViewer.copyPath();
+        if (previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewPath === selected.path && previewViewer.isOpen()) {
+          const generation = ++copyGeneration;
+          copyFeedbackOwner = "preview";
+          previewViewer.copyPath(success => {
+            if (generation !== copyGeneration) return;
+            pathCopiedUntil = success ? Date.now() + 3000 : 0;
+            pathCopyErrorUntil = success ? 0 : Date.now() + 3000;
+            requestRender();
+            setTimeout(requestRender, 3000);
+          });
+          return;
+        }
+        const generation = ++copyGeneration;
+        copyFeedbackOwner = "browser";
+        void copyToClipboard(selected.path).then(() => {
+          if (generation !== copyGeneration) return;
+          pathCopyErrorUntil = 0;
+          pathCopiedUntil = Date.now() + 3000;
+          requestRender();
+          setTimeout(requestRender, 3000);
+        }).catch(() => {
+          if (generation !== copyGeneration) return;
+          pathCopiedUntil = 0;
+          pathCopyErrorUntil = Date.now() + 3000;
+          requestRender();
+          setTimeout(requestRender, 3000);
+        });
       }
       return;
     }
@@ -1714,12 +1748,24 @@ export function createFileBrowser(
     const selected = getDisplayList()[browser.selectedIndex]?.node;
     if (selected) {
       if (previewPath !== selected.path) {
+        if (copyFeedbackOwner === "preview") {
+          copyGeneration += 1;
+          copyFeedbackOwner = null;
+          pathCopiedUntil = 0;
+          pathCopyErrorUntil = 0;
+        }
         previewViewer.setFile(selected);
         previewPath = selected.path;
       } else {
         previewViewer.updateFileRef(selected);
       }
     } else {
+      if (copyFeedbackOwner === "preview") {
+        copyGeneration += 1;
+        copyFeedbackOwner = null;
+        pathCopiedUntil = 0;
+        pathCopyErrorUntil = 0;
+      }
       previewViewer.close();
       previewPath = null;
     }
@@ -1759,7 +1805,12 @@ export function createFileBrowser(
     },
 
     isPathCopied(): boolean {
-      return !viewer.isOpen() && (!previewEnabled || lastRenderWidth < MIN_PREVIEW_WIDTH) && previewViewer.isPathCopied();
+      const previewOwnsFeedback = copyFeedbackOwner === "preview" && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen();
+      return !viewer.isOpen() && !previewOwnsFeedback && Date.now() < pathCopiedUntil;
+    },
+    isPathCopyError(): boolean {
+      const previewOwnsFeedback = copyFeedbackOwner === "preview" && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen();
+      return !viewer.isOpen() && !previewOwnsFeedback && Date.now() < pathCopyErrorUntil;
     },
     getRestorePath(): string | null {
       return restoreNotice;

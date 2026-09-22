@@ -283,7 +283,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
           };
           const border = (character: string) => theme.fg("border", character);
           const activity = browser.getActivityLabel();
-          const copyHint = browser.isPathCopied() ? " Path copied" : "";
+          const copyHint = browser.isPathCopied() ? " Path copied" : browser.isPathCopyError() ? " Unable to copy path" : "";
           const restoredPath = browser.getRestorePath();
           const rootAnchor = browser.getRootAnchor();
           const anchorBadge = rootAnchor
@@ -298,7 +298,8 @@ export default function editorExtension(pi: ExtensionAPI): void {
           const restored = safeRestoredPath
             ? theme.fg("dim", `${restoredPrefix}${truncatePathTail(safeRestoredPath, Math.max(0, availableWidth - visibleWidth(root) - visibleWidth(restoredPrefix)))}`)
             : "";
-          const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + (copyHint ? theme.fg("dim", copyHint) : "") + " ");
+          const copyTone = browser.isPathCopyError() ? "error" : "dim";
+          const header = padLine(prefix + theme.fg("text", root) + restored + (activity ? theme.fg("dim", ` ${activity}`) : "") + (copyHint ? theme.fg(copyTone, copyHint) : "") + " ");
 
           return [
             border(`┌${"─".repeat(innerWidth)}┐`),

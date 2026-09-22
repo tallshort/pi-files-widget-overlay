@@ -74,7 +74,40 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(100)[0]).not.toContain("Path copied");
     vi.useRealTimers();
   });
+  it("shows a copy failure in the viewer title", async () => {
+    vi.useFakeTimers();
+    const filePath = await createSourceFile();
+    vi.mocked(copyToClipboard).mockRejectedValueOnce(new Error("clipboard unavailable"));
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "wrapped.ts", path: filePath, isDirectory: false });
 
+    viewer.handleInput("y");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(viewer.render(100)[0]).toContain("Unable to copy path");
+    vi.advanceTimersByTime(3000);
+    expect(viewer.render(100)[0]).not.toContain("Unable to copy path");
+    vi.useRealTimers();
+  });
+
+  it("keeps the latest copy result when earlier requests finish late", async () => {
+    const filePath = await createSourceFile();
+    let resolveFirstCopy!: () => void;
+    const firstCopy = new Promise<void>(resolve => { resolveFirstCopy = resolve; });
+    vi.mocked(copyToClipboard).mockImplementationOnce(() => firstCopy).mockRejectedValueOnce(new Error("clipboard unavailable"));
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "wrapped.ts", path: filePath, isDirectory: false });
+
+    viewer.handleInput("y");
+    viewer.handleInput("y");
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(viewer.render(100)[0]).toContain("Unable to copy path");
+
+    resolveFirstCopy();
+    await Promise.resolve();
+    expect(viewer.render(100)[0]).toContain("Unable to copy path");
+  });
   it("derives initial and maximum panel heights from terminal rows", () => {
     expect(getResponsivePanelHeight(28, 40, 9, 24)).toBe(11);
     expect(getResponsivePanelHeight(29, 50, 8, 60)).toBe(43);

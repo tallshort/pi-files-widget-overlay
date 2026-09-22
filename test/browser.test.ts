@@ -124,6 +124,8 @@ async function removeDirectoryWithRetry(directory: string): Promise<void> {
 
 afterEach(async () => {
   await Promise.all(directories.splice(0).map(removeDirectoryWithRetry));
+  vi.mocked(copyToClipboard).mockReset();
+  vi.mocked(copyToClipboard).mockResolvedValue(undefined);
 });
 
 describe("file browser expanded changed view", () => {
@@ -145,11 +147,54 @@ describe("file browser expanded changed view", () => {
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
     await waitForScanComplete(browser);
 
+    browser.render(100);
+    browser.handleInput("p");
     browser.handleInput("y");
     await waitFor(() => vi.mocked(copyToClipboard).mock.calls.length > 0);
     await waitFor(() => browser.isPathCopied());
     expect(copyToClipboard).toHaveBeenCalledWith(browser.getBrowsePosition().directoryPath);
     expect(browser.isPathCopied()).toBe(true);
+  });
+
+  it("discards browser copy feedback after re-rooting", async () => {
+    const root = await createChangedRepository();
+    let resolveCopy!: () => void;
+    const pendingCopy = new Promise<void>(resolve => { resolveCopy = resolve; });
+    vi.mocked(copyToClipboard).mockImplementationOnce(() => pendingCopy);
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+
+    browser.render(40);
+    browser.handleInput("y");
+    browser.handleInput("u");
+    resolveCopy();
+    await Promise.resolve();
+    await Promise.resolve();
+
+    expect(browser.isPathCopied()).toBe(false);
+  });
+
+  it("reports browser copy failures without preview", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForScanComplete(browser);
+    browser.render(100);
+    browser.handleInput("p");
+    vi.mocked(copyToClipboard).mockRejectedValueOnce(new Error("clipboard unavailable"));
+
+    browser.handleInput("y");
+    await waitFor(() => browser.isPathCopyError());
+    expect(browser.isPathCopied()).toBe(false);
+  });
+
+  it("shows browser copy feedback in an available preview", async () => {
+    const root = await createChangedRepository();
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForScanComplete(browser);
+    browser.render(100);
+
+    browser.handleInput("y");
+    await waitFor(() => browser.render(100).join("\n").includes("Path copied"));
+    expect(browser.isPathCopied()).toBe(false);
   });
 
   it("keeps advanced shortcuts out of the default browser help", async () => {
