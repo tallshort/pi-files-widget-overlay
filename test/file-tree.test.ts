@@ -41,4 +41,11 @@ describe("file-tree path normalization", () => {
 
     expect(root.children?.[0]?.children).toHaveLength(1);
   });
+
+  it("preserves a relative root when realpath resolution fails", () => {
+    const rootPath = `missing-file-tree-root-${process.pid}`;
+    const root = buildFileTreeFromPaths(rootPath, [], new Map(), new Map(), new Set(), new Set());
+
+    expect(root.realPath).toBe(rootPath);
+  });
 });

@@ -1,33 +1,10 @@
-import { lstatSync, realpathSync, statSync } from "node:fs";
 import { join } from "node:path";
 
 import { MAX_TREE_DEPTH } from "./constants";
+import { getPathInfoSync, safeRealPathSync } from "./path-info";
 import type { DiffStats, FileNode, FlatNode } from "./types";
 
 const collator = new Intl.Collator(undefined, { sensitivity: "base" });
-
-function safeRealPathSync(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return path;
-  }
-}
-
-function getPathInfo(path: string): { isDirectory: boolean; isSymlink: boolean; realPath?: string } {
-  try {
-    const linkStat = lstatSync(path);
-    const isSymlink = linkStat.isSymbolicLink();
-    const targetStat = isSymlink ? statSync(path) : linkStat;
-    return {
-      isDirectory: targetStat.isDirectory(),
-      isSymlink,
-      realPath: targetStat.isDirectory() ? safeRealPathSync(path) : undefined,
-    };
-  } catch {
-    return { isDirectory: false, isSymlink: false };
-  }
-}
 
 function compareNodes(a: FileNode, b: FileNode): number {
   if (a.isDirectory !== b.isDirectory) {
@@ -230,7 +207,7 @@ export function buildFileTreeFromPaths(
       continue;
     }
 
-    const pathInfo = getPathInfo(filePath);
+    const pathInfo = getPathInfoSync(filePath);
     const isDirEntry = normalized.endsWith("/") || pathInfo.isDirectory;
     if (isDirEntry) {
       const depth = parts.length;

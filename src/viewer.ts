@@ -634,21 +634,20 @@ export function createViewer(
     const copiedPath = state.file?.path;
     const generation = ++copyGeneration;
     if (!copiedPath) return;
-    void copyToClipboard(copiedPath).then(() => {
+
+    const finishCopy = (success: boolean): void => {
       if (generation !== copyGeneration || state.file?.path !== copiedPath) return;
-      copyErrorUntil = 0;
-      pathCopiedUntil = Date.now() + 3000;
-      onResult?.(true);
+      pathCopiedUntil = success ? Date.now() + 3000 : 0;
+      copyErrorUntil = success ? 0 : Date.now() + 3000;
+      onResult?.(success);
       requestRender?.();
       setTimeout(() => requestRender?.(), 3000);
-    }).catch(() => {
-      if (generation !== copyGeneration || state.file?.path !== copiedPath) return;
-      pathCopiedUntil = 0;
-      copyErrorUntil = Date.now() + 3000;
-      onResult?.(false);
-      requestRender?.();
-      setTimeout(() => requestRender?.(), 3000);
-    });
+    };
+
+    void copyToClipboard(copiedPath).then(
+      () => finishCopy(true),
+      () => finishCopy(false),
+    );
   }
 
   return {

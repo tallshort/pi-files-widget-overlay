@@ -1,6 +1,6 @@
 import { copyToClipboard, createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
-import { lstatSync, realpathSync, statSync, type Dirent } from "node:fs";
+import type { Dirent } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
@@ -22,6 +22,7 @@ import {
 } from "./constants";
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
+import { getPathInfoSync, safeRealPathSync } from "./path-info";
 import type { DiffStats, FileNode, FlatNode } from "./types";
 import { formatErrorMessage, isIgnoredStatus, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
@@ -145,29 +146,6 @@ function formatRootPath(path: string): string {
   if (path === home) return "~";
   if (path.startsWith(home + sep)) return "~" + path.slice(home.length);
   return path;
-}
-
-function safeRealPathSync(path: string): string {
-  try {
-    return realpathSync(path);
-  } catch {
-    return resolve(path);
-  }
-}
-
-function getPathInfoSync(path: string): { isDirectory: boolean; isSymlink: boolean; realPath?: string } {
-  try {
-    const linkStat = lstatSync(path);
-    const isSymlink = linkStat.isSymbolicLink();
-    const targetStat = isSymlink ? statSync(path) : linkStat;
-    return {
-      isDirectory: targetStat.isDirectory(),
-      isSymlink,
-      realPath: targetStat.isDirectory() ? safeRealPathSync(path) : undefined,
-    };
-  } catch {
-    return { isDirectory: false, isSymlink: false };
-  }
 }
 
 async function getPathInfo(path: string, isSymlink: boolean): Promise<{ isDirectory: boolean; isSymlink: boolean; realPath?: string }> {
@@ -335,6 +313,29 @@ export function createFileBrowser(
   let pathCopyErrorUntil = 0;
   let copyGeneration = 0;
   let copyFeedbackOwner: "browser" | "preview" | null = null;
+
+  function finishCopyFeedback(generation: number, success: boolean): void {
+    if (generation !== copyGeneration) return;
+    pathCopiedUntil = success ? Date.now() + 3000 : 0;
+    pathCopyErrorUntil = success ? 0 : Date.now() + 3000;
+    requestRender();
+    setTimeout(requestRender, 3000);
+  }
+
+  function clearCopyFeedback(): void {
+    copyGeneration += 1;
+    copyFeedbackOwner = null;
+    pathCopiedUntil = 0;
+    pathCopyErrorUntil = 0;
+  }
+
+  function clearPreviewCopyFeedback(): void {
+    if (copyFeedbackOwner === "preview") clearCopyFeedback();
+  }
+
+  function previewOwnsCopyFeedback(): boolean {
+    return copyFeedbackOwner === "preview" && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen();
+  }
   let pendingRestorePath = initialSelectedPath ? resolve(initialSelectedPath) : initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoredDirectoryPath = initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
@@ -494,6 +495,15 @@ export function createFileBrowser(
     return true;
   }
 
+  function fallBackToRestoredDirectory(): void {
+    if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
+      pendingRestorePath = restoredDirectoryPath;
+      scanPendingRestorePath();
+    } else {
+      pendingRestorePath = null;
+    }
+  }
+
   function scanPendingRestorePath(): void {
     if (!pendingRestorePath || browser.scanState.mode !== "safe" || !browser.root) return;
     const target = relative(rootPath, pendingRestorePath);
@@ -511,12 +521,7 @@ export function createFileBrowser(
       }
       const next = current.children.find(child => child.name === parts[index]);
       if (!next) {
-        if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
-          pendingRestorePath = restoredDirectoryPath;
-          scanPendingRestorePath();
-        } else {
-          pendingRestorePath = null;
-        }
+        fallBackToRestoredDirectory();
         return;
       }
       if (index === parts.length - 1) {
@@ -524,12 +529,7 @@ export function createFileBrowser(
         return;
       }
       if (!next.isDirectory) {
-        if (restoredDirectoryPath && pendingRestorePath !== restoredDirectoryPath) {
-          pendingRestorePath = restoredDirectoryPath;
-          scanPendingRestorePath();
-        } else {
-          pendingRestorePath = null;
-        }
+        fallBackToRestoredDirectory();
         return;
       }
       current = next;
@@ -1225,10 +1225,7 @@ export function createFileBrowser(
   function setRoot(newRoot: string, restoreLocation?: RootLocation): void {
     if (viewer.isOpen()) viewer.close();
     if (previewViewer.isOpen()) previewViewer.close();
-    copyGeneration += 1;
-    pathCopiedUntil = 0;
-    pathCopyErrorUntil = 0;
-    copyFeedbackOwner = null;
+    clearCopyFeedback();
     previewPath = null;
     pendingRestorePath = restoreLocation?.selectedFilePath ?? restoreLocation?.directoryPath ?? null;
     restoredDirectoryPath = restoreLocation?.directoryPath ?? null;
@@ -1608,30 +1605,15 @@ export function createFileBrowser(
         if (previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewPath === selected.path && previewViewer.isOpen()) {
           const generation = ++copyGeneration;
           copyFeedbackOwner = "preview";
-          previewViewer.copyPath(success => {
-            if (generation !== copyGeneration) return;
-            pathCopiedUntil = success ? Date.now() + 3000 : 0;
-            pathCopyErrorUntil = success ? 0 : Date.now() + 3000;
-            requestRender();
-            setTimeout(requestRender, 3000);
-          });
+          previewViewer.copyPath(success => finishCopyFeedback(generation, success));
           return;
         }
         const generation = ++copyGeneration;
         copyFeedbackOwner = "browser";
-        void copyToClipboard(selected.path).then(() => {
-          if (generation !== copyGeneration) return;
-          pathCopyErrorUntil = 0;
-          pathCopiedUntil = Date.now() + 3000;
-          requestRender();
-          setTimeout(requestRender, 3000);
-        }).catch(() => {
-          if (generation !== copyGeneration) return;
-          pathCopiedUntil = 0;
-          pathCopyErrorUntil = Date.now() + 3000;
-          requestRender();
-          setTimeout(requestRender, 3000);
-        });
+        void copyToClipboard(selected.path).then(
+          () => finishCopyFeedback(generation, true),
+          () => finishCopyFeedback(generation, false),
+        );
       }
       return;
     }
@@ -1748,24 +1730,14 @@ export function createFileBrowser(
     const selected = getDisplayList()[browser.selectedIndex]?.node;
     if (selected) {
       if (previewPath !== selected.path) {
-        if (copyFeedbackOwner === "preview") {
-          copyGeneration += 1;
-          copyFeedbackOwner = null;
-          pathCopiedUntil = 0;
-          pathCopyErrorUntil = 0;
-        }
+        clearPreviewCopyFeedback();
         previewViewer.setFile(selected);
         previewPath = selected.path;
       } else {
         previewViewer.updateFileRef(selected);
       }
     } else {
-      if (copyFeedbackOwner === "preview") {
-        copyGeneration += 1;
-        copyFeedbackOwner = null;
-        pathCopiedUntil = 0;
-        pathCopyErrorUntil = 0;
-      }
+      clearPreviewCopyFeedback();
       previewViewer.close();
       previewPath = null;
     }
@@ -1805,12 +1777,10 @@ export function createFileBrowser(
     },
 
     isPathCopied(): boolean {
-      const previewOwnsFeedback = copyFeedbackOwner === "preview" && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen();
-      return !viewer.isOpen() && !previewOwnsFeedback && Date.now() < pathCopiedUntil;
+      return !viewer.isOpen() && !previewOwnsCopyFeedback() && Date.now() < pathCopiedUntil;
     },
     isPathCopyError(): boolean {
-      const previewOwnsFeedback = copyFeedbackOwner === "preview" && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen();
-      return !viewer.isOpen() && !previewOwnsFeedback && Date.now() < pathCopyErrorUntil;
+      return !viewer.isOpen() && !previewOwnsCopyFeedback() && Date.now() < pathCopyErrorUntil;
     },
     getRestorePath(): string | null {
       return restoreNotice;
