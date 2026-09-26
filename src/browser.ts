@@ -128,8 +128,9 @@ export function createFileBrowser(
   let gitBranch = "";
   const gitErrors = new Set<string>();
 
-  const viewer = createViewer({ getRoot: () => rootPath, projectCwd, requestRender }, theme, requestComment);
-  const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true, requestRender }, theme, requestComment);
+  const wordWrapByPath = new Map<string, boolean>();
+  const viewer = createViewer({ getRoot: () => rootPath, projectCwd, requestRender, wordWrapByPath }, theme, requestComment);
+  const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true, requestRender, wordWrapByPath }, theme, requestComment);
   let previewPath: string | null = null;
   let lastRenderWidth = 0;
   let previewEnabled = true;

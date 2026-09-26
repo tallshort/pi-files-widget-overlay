@@ -731,6 +731,27 @@ describe("file browser expanded changed view", () => {
     expect(cleared).not.toContain("/changed");
     expect(cleared).toContain(`/${CURSOR_MARKER}█`);
   });
+  it("preserves word wrap when opening a previewed file", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await writeFile(join(root, "long.ts"), `export const value = "${"wrapped ".repeat(30)}";\n`);
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
+    await waitForScanComplete(browser);
+
+    browser.handleInput("j");
+    browser.render(100);
+    browser.handleInput("w");
+    expect(browser.render(100).join("\n")).toContain("[WRAP]");
+
+    browser.handleInput("\r");
+    expect(browser.render(100).join("\n")).toContain("[WRAP]");
+
+    browser.handleInput("w");
+    expect(browser.render(100).join("\n")).toContain("[NO WRAP]");
+    browser.handleInput("\u001b");
+    expect(browser.render(100).join("\n")).toContain("[NO WRAP]");
+  });
+
   it("shows a read-only preview on wide terminals and falls back on narrow terminals", async () => {
     const root = await createChangedRepository();
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});

@@ -66,6 +66,7 @@ export interface ViewerConfig {
   projectCwd: string;
   readOnly?: boolean;
   requestRender?: () => void;
+  wordWrapByPath?: Map<string, boolean>;
 }
 
 export function createViewer(
@@ -73,7 +74,7 @@ export function createViewer(
   theme: Theme,
   requestComment: (payload: CommentPayload, comment: string) => void
 ): ViewerController {
-  const { getRoot, projectCwd, readOnly = false, requestRender } = config;
+  const { getRoot, projectCwd, readOnly = false, requestRender, wordWrapByPath } = config;
   let pathCopiedUntil = 0;
   let copyErrorUntil = 0;
   let copyGeneration = 0;
@@ -416,7 +417,7 @@ export function createViewer(
       viewport.reset();
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
-      state.wordWrap = false;
+      state.wordWrap = wordWrapByPath?.get(file.path) ?? false;
       state.showFullHelp = false;
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
@@ -433,6 +434,11 @@ export function createViewer(
         copyGeneration += 1;
       }
       state.file = file;
+      const storedWordWrap = file ? wordWrapByPath?.get(file.path) : undefined;
+      if (storedWordWrap !== undefined && storedWordWrap !== state.wordWrap) {
+        state.wordWrap = storedWordWrap;
+        state.lastRenderWidth = 0;
+      }
       if (state.diffMode && (!file?.gitStatus || isUntrackedStatus(file.gitStatus))) {
         state.diffMode = false;
         setMode("normal");
@@ -592,6 +598,7 @@ export function createViewer(
           break;
         case "toggle-wrap":
           state.wordWrap = !state.wordWrap;
+          if (state.file && wordWrapByPath) wordWrapByPath.set(state.file.path, state.wordWrap);
           state.lastRenderWidth = 0;
           break;
         case "toggle-diff":
