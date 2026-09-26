@@ -1,6 +1,15 @@
 # Changelog
 
 All notable changes to this extension will be documented in this file.
+## [0.8.1] - 2026-09-22
+
+### Changed
+- Add `r` as a left-hand alias for Markdown rendered/raw toggling.
+
+### Fixed
+- Show Browser copy status in the visible preview or Files title as appropriate, report Browser and Viewer clipboard failures instead of silently ignoring them, and discard stale feedback after navigation.
+- Show Markdown `[RAW]` / `[RENDERED]` status alongside `[UNTRACKED]` for untracked Markdown files.
+
 ## [0.8.0] - 2026-09-15
 
 ### Added
@@ -8,8 +17,13 @@ All notable changes to this extension will be documented in this file.
 - Show a transient warning when stored pinned roots are unavailable.
 
 ### Changed
+- Append accessible pinned roots after explicit `/readfiles` roots, normalize and de-duplicate command roots, and mark pinned root badges with an accent `*`.
+- Keep advanced pinning and root-switching hints behind `?`; the complete Browser help uses three lines.
 - Preserve the active root for the current Overlay after unpinning it, while removing it from future default root lists.
 
+### Fixed
+- Keep explicit single-root commands from restoring a saved multi-root position when pins are appended, including equivalent duplicate command roots.
+- Preserve explicit relative and `~/` roots when pinning changes the active root list, and remove the pinned marker immediately after unpinning the active root.
 
 ## [0.7.0] - 2026-09-15
 
