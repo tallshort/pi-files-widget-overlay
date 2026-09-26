@@ -85,7 +85,7 @@ While either search is active, type to search and use `↑` / `↓` to move. `En
 | `PgUp` / `PgDn` or `Ctrl-U` / `Ctrl-D` | Scroll by half a page. |
 | `g` / `G` | Jump to the top/bottom; `<count>G` jumps to a logical line. |
 | `d` | Toggle Git diff for a changed tracked file. |
-| `m` / `r` | Toggle rendered/raw Markdown. |
+| `m` / `r` | Toggle rendered/raw Markdown in the normal, non-diff view. |
 | `w` | Toggle word wrap. |
 | `y` | Copy the current file's absolute path. |
 | `/` | Enter search mode. |

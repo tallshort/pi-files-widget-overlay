@@ -140,7 +140,7 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(100).slice(-2).join("\n")).toContain("q/Esc/←: back");
     viewer.handleInput("?");
     expect(viewer.render(100).at(-1)).toContain("?: help");
-    expect(viewer.render(100).at(-1)).toContain("m/r: raw/render");
+    expect(viewer.render(100).at(-1)).not.toContain("m/r:");
 
     viewer.handleInput("/");
     expect(viewer.render(80)[0]).toContain(`/${CURSOR_MARKER}█`);
@@ -831,13 +831,43 @@ describe("file viewer word wrapping", () => {
 
     expect(comments[0]?.payload).toMatchObject({ lineRange: "line 1", selectedText: "# Title" });
   });
+
+  it("leaves diff mode when a refreshed Markdown file becomes untracked", async () => {
+    const filePath = await createSourceFile("# Title\n", "README.md");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    initTheme();
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false, gitStatus: " M" });
+    expect(viewer.render(100)[0]).toContain("[DIFF]");
+    expect(viewer.render(100).at(-1)).toContain("d: diff");
+    expect(viewer.render(100).at(-1)).not.toContain("m/r:");
+    viewer.handleInput("?");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("d: diff");
+    expect(viewer.render(100).slice(-2).join("\n")).not.toContain("m/r:");
+    viewer.handleInput("?");
+    viewer.handleInput("v");
+    expect(viewer.render(100).at(-1)).toContain("v/Esc: cancel");
+
+    viewer.updateFileRef({ name: "README.md", path: filePath, isDirectory: false, gitStatus: "??" });
+    await new Promise(resolve => setTimeout(resolve, 20));
+    const header = viewer.render(100)[0];
+    expect(header).toContain("[UNTRACKED]");
+    expect(header).toContain("[RENDERED]");
+    expect(header).not.toContain("[DIFF]");
+    expect(viewer.render(100).at(-1)).toContain("m/r: raw/render");
+    expect(viewer.render(100).at(-1)).not.toContain("d: diff");
+    viewer.handleInput("?");
+    expect(viewer.render(100).slice(-2).join("\n")).toContain("m/r: raw/render");
+    expect(viewer.render(100).slice(-2).join("\n")).not.toContain("d: diff");
+  });
+
   it("toggles Markdown rendering with r", async () => {
     const filePath = await createSourceFile("# Title\n\nText\n", "README.md");
     const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
     initTheme();
-    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false, gitStatus: "??" });
     await new Promise(resolve => setTimeout(resolve, 20));
 
+    expect(viewer.render(100)[0]).toContain("[UNTRACKED]");
     expect(viewer.render(100)[0]).toContain("[RENDERED]");
     viewer.handleInput("r");
     expect(viewer.render(100)[0]).toContain("[RAW]");

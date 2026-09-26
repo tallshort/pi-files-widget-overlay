@@ -515,9 +515,8 @@ export function createViewer(
         : "";
     const fileNameWidth = Math.max(0, width - visibleWidth(copyHint));
     let header = theme.bold(theme.fg("text", truncateToWidth(sanitizeTerminalLabel(state.file.name), fileNameWidth, "…"))) + copyHint;
-    if (isUntracked) {
-      header += theme.fg("dim", " [UNTRACKED]");
-    } else if (state.diffMode) {
+    if (isUntracked) header += theme.fg("dim", " [UNTRACKED]");
+    if (state.diffMode) {
       header += theme.fg("warning", " [DIFF]");
     } else if (isMarkdownFile()) {
       header += theme.fg("accent", state.renderMarkdown ? " [RENDERED]" : " [RAW]");
@@ -616,13 +615,15 @@ export function createViewer(
       helpLines = ["Type to search  Enter: confirm  Esc: cancel"];
     } else if (readOnly) {
       helpLines = ["Preview — select a file in the browser"];
-    } else if (state.showFullHelp) {
-      helpLines = [
-        "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  y: copy path",
-        "v: select  d: diff  m/r: render  []: change  +/-: height  ?: hide  q/Esc/←: back",
-      ];
     } else {
-      helpLines = ["/: search  n/N: match  v: select  m/r: raw/render  d: diff  y: copy path  ?: help  q: back"];
+      const markdownHelp = isMarkdownFile() && !state.diffMode ? "  m/r: raw/render" : "";
+      const diffHelp = state.file?.gitStatus && !isUntrackedStatus(state.file.gitStatus) ? "  d: diff" : "";
+      helpLines = state.showFullHelp
+        ? [
+            "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  y: copy path",
+            `v: select${diffHelp}${markdownHelp}  []: change  +/-: height  ?: hide  q/Esc/←: back`,
+          ]
+        : [`/: search  n/N: match  v: select${markdownHelp}${diffHelp}  y: copy path  ?: help  q: back`];
     }
     lines.push(...helpLines.map(line => truncateToWidth(theme.fg("dim", line), width)));
 
@@ -687,8 +688,16 @@ export function createViewer(
         copyGeneration += 1;
       }
       state.file = file;
+      if (state.diffMode && (!file?.gitStatus || isUntrackedStatus(file.gitStatus))) {
+        state.diffMode = false;
+        setMode("normal");
+        state.scroll = 0;
+        state.cursor = 0;
+        state.renderMarkdown = !!file && isMarkdownPath(file.path);
+        state.lastRenderWidth = 0;
+        refreshRawContent();
+      }
     },
-
     close(): void {
       pathCopiedUntil = 0;
       copyErrorUntil = 0;
