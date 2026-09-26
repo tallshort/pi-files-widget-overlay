@@ -2,6 +2,7 @@ import type { Dirent } from "node:fs";
 import { describe, expect, it, vi } from "vitest";
 
 import { createBrowserRootSession, type BrowserRootState } from "../src/browser-root-session.ts";
+import type { FileNode } from "../src/types.ts";
 
 function directoryEntry(name: string): Dirent {
   return {
@@ -80,6 +81,67 @@ describe("browser root session", () => {
     await vi.runAllTimersAsync();
 
     expect([...state.nodeByPath.keys()]).not.toContain("/old/stale");
+    expect(onEvent).not.toHaveBeenCalled();
+    vi.useRealTimers();
+  });
+
+  it("keeps aggregate line counts unknown until the initial scan publishes", () => {
+    vi.useFakeTimers();
+    const state = createState();
+    const session = createBrowserRootSession({
+      state,
+      agentModifiedFiles: new Set(),
+      ignored: new Set(),
+      readDirectory: () => Promise.resolve([]),
+      onEvent: () => {},
+      onError: () => {},
+    });
+
+    session.startRoot("/root");
+
+    expect(state.stats.totalLines).toBeUndefined();
+    vi.clearAllTimers();
+    vi.useRealTimers();
+  });
+
+  it("defers replacement line-count work until known counts are reconciled", async () => {
+    vi.useFakeTimers();
+    const state = createState();
+    const onEvent = vi.fn();
+    const statFile = vi.fn().mockResolvedValue({ size: 10, mtimeMs: 1 });
+    const readTextFile = vi.fn().mockResolvedValue("contents");
+    const file: FileNode = {
+      name: "open.ts",
+      path: "/root/open.ts",
+      isDirectory: false,
+      parent: undefined,
+    };
+    const root: FileNode = {
+      name: ".",
+      path: "/root",
+      isDirectory: true,
+      children: [file],
+      expanded: true,
+      hasChangedChildren: false,
+    };
+    file.parent = root;
+    const session = createBrowserRootSession({
+      state,
+      agentModifiedFiles: new Set(),
+      ignored: new Set(),
+      readDirectory: () => Promise.resolve([]),
+      statFile,
+      readTextFile,
+      onEvent,
+      onError: () => {},
+    });
+
+    session.replaceRoot(root, { path: file.path, lineCount: 7 });
+    await vi.runAllTimersAsync();
+
+    expect(state.stats.totalLines).toBe(7);
+    expect(statFile).not.toHaveBeenCalled();
+    expect(readTextFile).not.toHaveBeenCalled();
     expect(onEvent).not.toHaveBeenCalled();
     vi.useRealTimers();
   });

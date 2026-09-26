@@ -409,7 +409,7 @@ export function createFileBrowser(
     // replacement tree so reopening an empty folder remains a valid location.
     retainRestoredDirectory(root);
     rootSession.setGitContext(gitStatus, diffStats, usesGitTree);
-    rootSession.replaceRoot(root);
+    rootSession.replaceRoot(root, viewingFile ?? undefined);
     for (const path of expandedPaths) {
       const node = browser.nodeByPath.get(path);
       if (node?.isDirectory) node.expanded = true;
@@ -427,7 +427,6 @@ export function createFileBrowser(
     if (viewingFile) {
       const node = browser.nodeByPath.get(viewingFile.path) ?? null;
       if (node) {
-        if (node.lineCount === undefined && viewingFile.lineCount !== undefined) node.lineCount = viewingFile.lineCount;
         viewer.updateFileRef(node);
       }
     }

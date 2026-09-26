@@ -46,7 +46,7 @@ export interface BrowserRootSession {
   getGeneration(): number;
   isCurrent(generation: number): boolean;
   startRoot(path: string): number;
-  replaceRoot(root: FileNode): void;
+  replaceRoot(root: FileNode, preservedFile?: { path: string; lineCount?: number }): void;
   stop(): void;
   setGitContext(status: Map<string, string>, diffStats: Map<string, DiffStats>, usesGitTree: boolean): void;
   refreshStats(): void;
@@ -62,6 +62,8 @@ interface BrowserRootSessionOptions {
   agentModifiedFiles: Set<string>;
   ignored: Set<string>;
   readDirectory: (path: string) => Promise<Dirent[]>;
+  statFile?: (path: string) => Promise<{ size: number; mtimeMs: number }>;
+  readTextFile?: (path: string) => Promise<string>;
   onEvent: (event: BrowserRootSessionEvent) => void;
   onError: (message: string) => void;
 }
@@ -163,9 +165,12 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
     }
   }
 
+  const statFile = options.statFile ?? stat;
+  const readTextFile = options.readTextFile ?? ((path: string) => readFile(path, "utf-8"));
+
   async function updateLineCount(node: FileNode): Promise<void> {
     try {
-      const fileStat = await stat(node.path);
+      const fileStat = await statFile(node.path);
       if (fileStat.size > MAX_LINE_COUNT_BYTES) {
         node.lineCount = undefined;
         return;
@@ -175,7 +180,7 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
         node.lineCount = cached.count;
         return;
       }
-      const content = await readFile(node.path, "utf-8");
+      const content = await readTextFile(node.path);
       const count = content.split("\n").length;
       node.lineCount = count;
       lineCountCache.set(node.path, { size: fileStat.size, mtimeMs: fileStat.mtimeMs, count });
@@ -445,11 +450,11 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
       state.scanState.isPartial = state.scanState.mode === "safe";
       state.scanState.pending = 0;
       indexNodes(state.root, state.nodeByPath);
-      refreshStats();
+      state.stats = { totalLines: undefined, additions: 0, deletions: 0 };
       enqueueScan(state.root, 0, true);
       return rootGeneration;
     },
-    replaceRoot(root): void {
+    replaceRoot(root, preservedFile): void {
       clearWork();
       state.root = root;
       state.scanState.mode = "none";
@@ -457,6 +462,10 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
       state.scanState.isPartial = false;
       state.scanState.pending = 0;
       indexNodes(root, state.nodeByPath);
+      if (preservedFile?.lineCount !== undefined) {
+        const node = state.nodeByPath.get(preservedFile.path);
+        if (node && node.lineCount === undefined) node.lineCount = preservedFile.lineCount;
+      }
       refreshStats();
       queueLineCountsForDirectory(root);
     },
