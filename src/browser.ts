@@ -1,7 +1,7 @@
 import { copyToClipboard, createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Dirent } from "node:fs";
-import { readdir, readFile, realpath, stat } from "node:fs/promises";
+import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
 import { dirname, join, relative, resolve, sep } from "node:path";
 
@@ -9,26 +9,20 @@ import {
   DEFAULT_BROWSER_HEIGHT,
   getResponsivePanelHeight,
   OVERLAY_MAX_HEIGHT_RATIO,
-  LINE_COUNT_BATCH_DELAY_MS,
-  LINE_COUNT_BATCH_SIZE,
   MAX_BROWSER_HEIGHT,
-  MAX_LINE_COUNT_BYTES,
-  MAX_TREE_DEPTH,
   MIN_PANEL_HEIGHT,
   POLL_INTERVAL_MS,
-  SCAN_BATCH_DELAY_MS,
-  SCAN_BATCH_SIZE,
-  SAFE_MODE_ENTRY_THRESHOLD,
 } from "./constants";
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
 import { deriveBrowserDisplayList, deriveBrowserLocation, deriveChangedNavigationTarget, expandChangedDirectories, restoreExpandedDirectories, type BrowserLocation } from "./browser-display";
+import { createBrowserRootSession, type BrowserRootState } from "./browser-root-session";
 import { classifyBrowserInput, type BrowserInputCommand } from "./browser-input";
 import { createBrowserQuery, type BrowserQueryEffect } from "./browser-query";
 import { renderBrowserTree } from "./browser-render";
-import { getPathInfoSync, safeRealPathSync } from "./path-info";
+import { getPathInfoSync } from "./path-info";
 import type { DiffStats, FileNode, FlatNode } from "./types";
-import { formatErrorMessage, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
+import { formatErrorMessage, sanitizeTerminalLabel } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
 
 const MIN_PREVIEW_WIDTH = 80;
@@ -49,12 +43,6 @@ export interface BrowserController {
   invalidate(): void;
 }
 
-interface BrowserStats {
-  totalLines?: number;
-  additions: number;
-  deletions: number;
-}
-
 export interface RootAnchor {
   id: string;
   path: string;
@@ -65,23 +53,9 @@ export interface RootAnchor {
 
 type RootLocation = BrowserLocation;
 
-
-type ScanMode = "full" | "safe" | "none";
-
-interface ScanState {
-  mode: ScanMode;
-  isScanning: boolean;
-  isPartial: boolean;
-  pending: number;
-}
-
-interface BrowserState {
-  root: FileNode | null;
+interface BrowserState extends BrowserRootState {
   flatList: FlatNode[];
   fullList: FlatNode[];
-  stats: BrowserStats;
-  nodeByPath: Map<string, FileNode>;
-  scanState: ScanState;
   selectedIndex: number;
   contentMatches: Set<string>;
   showOnlyChanged: boolean;
@@ -93,8 +67,6 @@ interface BrowserState {
   browserHeight: number;
   lastPollTime: number;
 }
-
-
 
 function findNodeByPath(root: FileNode | null, path: string): FileNode | null {
   if (!root) return null;
@@ -109,29 +81,6 @@ function findNodeByPath(root: FileNode | null, path: string): FileNode | null {
   return null;
 }
 
-function indexNodes(root: FileNode | null, map: Map<string, FileNode>): void {
-  map.clear();
-  if (!root) return;
-  const stack: FileNode[] = [root];
-  while (stack.length > 0) {
-    const node = stack.pop();
-    if (!node) continue;
-    map.set(node.path, node);
-    if (node.children) {
-      for (const child of node.children) {
-        stack.push(child);
-      }
-    }
-  }
-}
-
-function getNodeDepth(node: FileNode, root: string): number {
-  if (node.path === root) return 0;
-  const rel = relative(root, node.path);
-  if (!rel) return 0;
-  return rel.split(sep).length;
-}
-
 function formatRootPath(path: string): string {
   const home = homedir();
   if (!home) return path;
@@ -139,49 +88,6 @@ function formatRootPath(path: string): string {
   if (path.startsWith(home + sep)) return "~" + path.slice(home.length);
   return path;
 }
-
-async function getPathInfo(path: string, isSymlink: boolean): Promise<{ isDirectory: boolean; isSymlink: boolean; realPath?: string }> {
-  try {
-    const targetStat = await stat(path);
-    return {
-      isDirectory: targetStat.isDirectory(),
-      isSymlink,
-      realPath: targetStat.isDirectory() ? await realpath(path).catch(() => resolve(path)) : undefined,
-    };
-  } catch {
-    return { isDirectory: false, isSymlink };
-  }
-}
-
-function hasAncestorRealPath(node: FileNode | undefined, realPath: string): boolean {
-  let current = node;
-  while (current) {
-    if (current.realPath === realPath) return true;
-    current = current.parent;
-  }
-  return false;
-}
-
-function shouldSafeMode(path: string): boolean {
-  const resolved = resolve(path);
-  const home = resolve(homedir());
-  const root = resolve(sep);
-  return resolved === home || resolved === root;
-}
-
-
-function getTreeStats(root: FileNode | null): BrowserStats {
-  if (!root) {
-    return { totalLines: undefined, additions: 0, deletions: 0 };
-  }
-
-  return {
-    totalLines: root.lineCountComplete ? root.totalLines ?? 0 : undefined,
-    additions: root.totalAdditions ?? 0,
-    deletions: root.totalDeletions ?? 0,
-  };
-}
-
 
 function collapseAllExcept(node: FileNode, keep: Set<FileNode>): void {
   if (node.isDirectory) {
@@ -258,7 +164,7 @@ export function createFileBrowser(
   let restoredDirectoryPath = initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
   const query = createBrowserQuery();
-  const scanState: ScanState = {
+  const scanState: BrowserRootState["scanState"] = {
     mode: "none",
     isScanning: false,
     isPartial: false,
@@ -284,21 +190,25 @@ export function createFileBrowser(
     lastPollTime: Date.now(),
   };
 
-  const lineCountCache = new Map<string, { size: number; mtimeMs: number; count: number }>();
-  const lineCountQueue: FileNode[] = [];
-  const lineCountPending = new Set<string>();
-  let lineCountTimer: ReturnType<typeof setTimeout> | null = null;
-
-  const scanQueue: Array<{ node: FileNode; depth: number }> = [];
-  const scanQueued = new Set<string>();
-  let scanTimer: ReturnType<typeof setTimeout> | null = null;
-  // Incremented on every (re-)root. In-flight async scan/line-count batches
-  // capture the value when they start and bail after each await if it changed,
-  // so work belonging to an old root can never mutate state for the new one.
-  let rootGeneration = 0;
-  // Also invalidate work when Git replaces the provisional filesystem tree at
-  // the same root. Root generation alone cannot distinguish that transition.
-  let treeGeneration = 0;
+  const rootSession = createBrowserRootSession({
+    state: browser,
+    agentModifiedFiles,
+    ignored,
+    readDirectory,
+    onError: reportError,
+    onEvent(event) {
+      refreshLists();
+      if (event === "tree") {
+        restoreInitialPosition();
+        scanPendingRestorePath();
+        if (browser.focusFirstChildOf) {
+          const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
+          if (directory && focusFirstChild(directory)) browser.focusFirstChildOf = null;
+        }
+      }
+      requestRender();
+    },
+  });
   let pinRequestGeneration = 0;
   let gitRefreshGeneration: number | null = null;
   let gitAbort = new AbortController();
@@ -431,7 +341,7 @@ export function createFileBrowser(
     let current = browser.root;
     for (let index = 0; index < parts.length; index++) {
       if (current.children === undefined) {
-        enqueueScan(current, index, true);
+        rootSession.enqueueScan(current, index, true);
         return;
       }
       const next = current.children.find(child => child.name === parts[index]);
@@ -494,23 +404,12 @@ export function createFileBrowser(
     const changedExpansionPaths = new Set(browser.expandedForChangedView);
     const viewingFile = viewer.getFile();
 
-    // Cancel provisional work before publishing the Git-backed tree. In-flight
-    // batches also compare treeGeneration after each await.
-    treeGeneration += 1;
-    scanQueue.length = 0;
-    scanQueued.clear();
-    lineCountQueue.length = 0;
-    lineCountPending.clear();
 
     // Git does not list empty directories. Keep a restored directory in the
     // replacement tree so reopening an empty folder remains a valid location.
     retainRestoredDirectory(root);
-    browser.root = root;
-    browser.scanState.mode = "none";
-    browser.scanState.isScanning = false;
-    browser.scanState.isPartial = false;
-    browser.scanState.pending = 0;
-    indexNodes(root, browser.nodeByPath);
+    rootSession.setGitContext(gitStatus, diffStats, usesGitTree);
+    rootSession.replaceRoot(root);
     for (const path of expandedPaths) {
       const node = browser.nodeByPath.get(path);
       if (node?.isDirectory) node.expanded = true;
@@ -532,7 +431,6 @@ export function createFileBrowser(
         viewer.updateFileRef(node);
       }
     }
-    queueLineCountsForDirectory(root);
   }
   function reportError(message: string): void {
     browser.errorMessage = message;
@@ -574,245 +472,9 @@ export function createFileBrowser(
     return true;
   }
 
-  function queueLineCount(node: FileNode, force = false): void {
-    if (node.isDirectory) return;
-    if (!force && node.lineCount !== undefined) return;
-    if (lineCountPending.has(node.path)) return;
-    lineCountPending.add(node.path);
-    lineCountQueue.push(node);
-    if (!lineCountTimer) {
-      lineCountTimer = setTimeout(processLineCountBatch, LINE_COUNT_BATCH_DELAY_MS);
-    }
-  }
-
-  function queueLineCountsForDirectory(directory: FileNode | null): void {
-    if (!directory?.children) return;
-    for (const child of directory.children) {
-      if (!child.isDirectory) queueLineCount(child);
-    }
-  }
-
-  async function updateLineCount(node: FileNode): Promise<void> {
-    try {
-      const fileStat = await stat(node.path);
-      if (fileStat.size > MAX_LINE_COUNT_BYTES) {
-        node.lineCount = undefined;
-        return;
-      }
-      const cached = lineCountCache.get(node.path);
-      if (cached && cached.size === fileStat.size && cached.mtimeMs === fileStat.mtimeMs) {
-        node.lineCount = cached.count;
-        return;
-      }
-      const content = await readFile(node.path, "utf-8");
-      const count = content.split("\n").length;
-      node.lineCount = count;
-      lineCountCache.set(node.path, { size: fileStat.size, mtimeMs: fileStat.mtimeMs, count });
-    } catch {
-      node.lineCount = undefined;
-    }
-  }
-
-  async function processLineCountBatch(): Promise<void> {
-    lineCountTimer = null;
-    if (!browser.root) return;
-    const generation = rootGeneration;
-    const tree = treeGeneration;
-    const batch = lineCountQueue.splice(0, LINE_COUNT_BATCH_SIZE);
-    if (batch.length === 0) return;
-
-    await Promise.all(
-      batch.map(async node => {
-        await updateLineCount(node);
-        if (generation === rootGeneration && tree === treeGeneration) {
-          lineCountPending.delete(node.path);
-        }
-      })
-    );
-    if (generation !== rootGeneration || tree !== treeGeneration) return;
-
-    updateTreeStats(browser.root);
-    browser.stats = getTreeStats(browser.root);
-    refreshLists();
-    requestRender();
-
-    if (lineCountQueue.length > 0) {
-      lineCountTimer = setTimeout(processLineCountBatch, LINE_COUNT_BATCH_DELAY_MS);
-    }
-  }
-
-  function shouldAutoScan(depth: number): boolean {
-    // In git repos the main tree comes from git file lists, not from filesystem
-    // crawling. If the user expands a symlinked directory inside that tree, only
-    // scan one level on demand; nested directories stay lazy until explicitly
-    // expanded so links into large trees (iCloud/Drive/$HOME) don't trigger a
-    // broad recursive crawl.
-    if (usesGitTree) {
-      return false;
-    }
-    if (browser.scanState.mode === "safe") {
-      return depth <= 0;
-    }
-    return depth <= MAX_TREE_DEPTH;
-  }
-
-  function getScanBatchSize(): number {
-    return browser.scanState.mode === "safe" ? 1 : SCAN_BATCH_SIZE;
-  }
-
-  function getScanDelay(): number {
-    return browser.scanState.mode === "safe" ? SCAN_BATCH_DELAY_MS * 4 : SCAN_BATCH_DELAY_MS;
-  }
-
-  function enqueueScan(node: FileNode, depth: number, force = false): void {
-    if (depth > MAX_TREE_DEPTH) return;
-    if (!force && browser.scanState.mode === "safe" && depth > 0) return;
-    if (node.children !== undefined || node.loading) return;
-    if (scanQueued.has(node.path)) return;
-
-    node.loading = true;
-    scanQueued.add(node.path);
-    scanQueue.push({ node, depth });
-    browser.scanState.pending = scanQueue.length;
-    browser.scanState.isScanning = true;
-
-    if (!scanTimer) {
-      scanTimer = setTimeout(processScanBatch, getScanDelay());
-    }
-  }
-
-  async function scanDirectory(node: FileNode, depth: number, generation: number, tree: number): Promise<void> {
-    try {
-      const entries = await readDirectory(node.path);
-      if (generation !== rootGeneration || tree !== treeGeneration) return;
-      const sorted = [...entries].sort((a, b) => a.name.toLowerCase().localeCompare(b.name.toLowerCase()));
-
-      if (node.path === rootPath && browser.scanState.mode === "full" && sorted.length >= SAFE_MODE_ENTRY_THRESHOLD) {
-        browser.scanState.mode = "safe";
-        browser.scanState.isPartial = true;
-        scanQueue.length = 0;
-        scanQueued.clear();
-      }
-
-      const dirs: FileNode[] = [];
-      const files: FileNode[] = [];
-
-      for (const entry of sorted) {
-        if (ignored.has(entry.name)) continue;
-        const fullPath = join(node.path, entry.name);
-        const childDepth = depth + 1;
-
-        if (entry.isDirectory()) {
-          const dirRealPath = await realpath(fullPath).catch(() => resolve(fullPath));
-          if (generation !== rootGeneration || tree !== treeGeneration) return;
-          const dirNode: FileNode = {
-            name: entry.name, path: fullPath, isDirectory: true, realPath: dirRealPath, parent: node,
-            children: undefined, expanded: childDepth < 1, hasChangedChildren: false,
-            gitStatus: gitStatus.get(normalizeGitPath(relative(rootPath, fullPath))),
-            diffStats: diffStats.get(normalizeGitPath(relative(rootPath, fullPath))),
-          };
-          dirs.push(dirNode);
-          browser.nodeByPath.set(fullPath, dirNode);
-          if (shouldAutoScan(childDepth)) enqueueScan(dirNode, childDepth);
-          continue;
-        }
-
-        if (entry.isSymbolicLink()) {
-          const pathInfo = await getPathInfo(fullPath, true);
-          if (generation !== rootGeneration || tree !== treeGeneration) return;
-          if (pathInfo.isDirectory) {
-            const isCycle = pathInfo.realPath ? hasAncestorRealPath(node, pathInfo.realPath) : false;
-            const dirNode: FileNode = {
-              name: entry.name, path: fullPath, isDirectory: true, isSymlink: true, realPath: pathInfo.realPath,
-              parent: node, children: isCycle ? [] : undefined, expanded: childDepth < 1, hasChangedChildren: false,
-              gitStatus: gitStatus.get(normalizeGitPath(relative(rootPath, fullPath))),
-              diffStats: diffStats.get(normalizeGitPath(relative(rootPath, fullPath))),
-            };
-            dirs.push(dirNode);
-            browser.nodeByPath.set(fullPath, dirNode);
-            if (!isCycle && shouldAutoScan(childDepth)) enqueueScan(dirNode, childDepth);
-            continue;
-          }
-          const symlinkFileNode: FileNode = {
-            name: entry.name, path: fullPath, isDirectory: false, isSymlink: true, parent: node,
-            agentModified: agentModifiedFiles.has(fullPath),
-            gitStatus: gitStatus.get(normalizeGitPath(relative(rootPath, fullPath))),
-            diffStats: diffStats.get(normalizeGitPath(relative(rootPath, fullPath))),
-          };
-          files.push(symlinkFileNode);
-          browser.nodeByPath.set(fullPath, symlinkFileNode);
-          queueLineCount(symlinkFileNode);
-          continue;
-        }
-
-        const fileNode: FileNode = {
-          name: entry.name, path: fullPath, isDirectory: false, parent: node, agentModified: agentModifiedFiles.has(fullPath),
-          gitStatus: gitStatus.get(normalizeGitPath(relative(rootPath, fullPath))),
-          diffStats: diffStats.get(normalizeGitPath(relative(rootPath, fullPath))),
-        };
-        files.push(fileNode);
-        browser.nodeByPath.set(fullPath, fileNode);
-        queueLineCount(fileNode);
-      }
-
-      node.children = [...dirs, ...files];
-    } catch {
-      if (generation === rootGeneration && tree === treeGeneration) {
-        node.children = [];
-        reportError(`Unable to scan ${node === browser.root ? "directory" : sanitizeTerminalLabel(node.name)}`);
-      }
-    } finally {
-      if (generation === rootGeneration && tree === treeGeneration) {
-        node.loading = false;
-        scanQueued.delete(node.path);
-      }
-    }
-  }
-
-  async function processScanBatch(): Promise<void> {
-    scanTimer = null;
-    if (!browser.root) return;
-    const generation = rootGeneration;
-    const tree = treeGeneration;
-    const batch = scanQueue.splice(0, getScanBatchSize());
-    if (batch.length === 0) {
-      browser.scanState.isScanning = false;
-      browser.scanState.pending = 0;
-      return;
-    }
-
-    for (const item of batch) {
-      await scanDirectory(item.node, item.depth, generation, tree);
-      if (generation !== rootGeneration || tree !== treeGeneration) return;
-    }
-
-    browser.scanState.pending = scanQueue.length;
-    browser.scanState.isScanning = scanQueue.length > 0;
-
-    updateTreeStats(browser.root);
-    browser.stats = getTreeStats(browser.root);
-    refreshLists();
-    restoreInitialPosition();
-    scanPendingRestorePath();
-    if (browser.focusFirstChildOf) {
-      const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
-      if (directory && focusFirstChild(directory)) browser.focusFirstChildOf = null;
-    }
-    requestRender();
-
-    if (scanQueue.length > 0) {
-      scanTimer = setTimeout(processScanBatch, getScanDelay());
-    }
-  }
-
   function stopBackgroundTasks(): void {
-    // Closing or re-rooting must invalidate already-running batches too: clearing
-    // only their timers lets an awaited scan reschedule itself after the overlay closes.
-    rootGeneration += 1;
+    rootSession.stop();
     gitAbort.abort();
-    treeGeneration += 1;
-    browser.scanState.isScanning = false;
-    browser.scanState.pending = 0;
     browser.errorMessage = null;
     if (errorTimer) {
       clearTimeout(errorTimer);
@@ -823,141 +485,13 @@ export function createFileBrowser(
       clearTimeout(noticeTimer);
       noticeTimer = null;
     }
-    if (lineCountTimer) {
-      clearTimeout(lineCountTimer);
-      lineCountTimer = null;
-    }
-    if (scanTimer) {
-      clearTimeout(scanTimer);
-      scanTimer = null;
-    }
     clearContentSearch();
   }
 
-  function applyAgentModified(): void {
-    for (const node of browser.nodeByPath.values()) {
-      if (!node.isDirectory) {
-        node.agentModified = agentModifiedFiles.has(node.path);
-      }
-    }
-  }
-
-  function applyGitUpdates(): void {
-    for (const node of browser.nodeByPath.values()) {
-      const relPath = normalizeGitPath(relative(rootPath, node.path));
-      node.gitStatus = gitStatus.get(relPath);
-      node.diffStats = diffStats.get(relPath);
-    }
-  }
-
-  function ensureNode(relPath: string): FileNode | null {
-    if (!browser.root) return null;
-    let normalized = relPath.trim();
-    if (!normalized) return null;
-    if (normalized.startsWith("./")) {
-      normalized = normalized.slice(2);
-    }
-    normalized = normalizeGitPath(normalized);
-    const parts = normalized.split("/").filter(Boolean);
-    if (parts.length === 0) return null;
-    if (parts.length - 1 > MAX_TREE_DEPTH) return null;
-
-    let current = browser.root;
-    let currentRel = "";
-
-    for (let i = 0; i < parts.length - 1; i++) {
-      const part = parts[i];
-      if (ignored.has(part)) return null;
-      currentRel = currentRel ? `${currentRel}/${part}` : part;
-      const dirPath = join(rootPath, currentRel);
-      let dirNode = browser.nodeByPath.get(dirPath);
-      if (!dirNode) {
-        const depth = i + 1;
-        dirNode = {
-          name: part,
-          path: dirPath,
-          isDirectory: true,
-          realPath: safeRealPathSync(dirPath),
-          parent: current,
-          children: [],
-          expanded: depth < 1,
-          hasChangedChildren: false,
-        };
-        current.children ??= [];
-        current.children.push(dirNode);
-        sortChildren(current);
-        browser.nodeByPath.set(dirPath, dirNode);
-      }
-      current = dirNode;
-    }
-
-    const fileName = parts[parts.length - 1];
-    if (ignored.has(fileName)) return null;
-
-    const filePath = join(rootPath, normalized);
-    const existing = browser.nodeByPath.get(filePath);
-    if (existing) return existing;
-
-    const pathInfo = getPathInfoSync(filePath);
-    if (pathInfo.isDirectory) {
-      const isCycle = pathInfo.realPath ? hasAncestorRealPath(current, pathInfo.realPath) : false;
-      const dirNode: FileNode = {
-        name: fileName,
-        path: filePath,
-        isDirectory: true,
-        isSymlink: pathInfo.isSymlink,
-        realPath: pathInfo.realPath ?? safeRealPathSync(filePath),
-        parent: current,
-        children: pathInfo.isSymlink && !isCycle ? undefined : [],
-        expanded: false,
-        hasChangedChildren: false,
-        gitStatus: gitStatus.get(normalized),
-        diffStats: diffStats.get(normalized),
-      };
-
-      current.children ??= [];
-      current.children.push(dirNode);
-      sortChildren(current);
-      browser.nodeByPath.set(filePath, dirNode);
-      return dirNode;
-    }
-
-    const fileNode: FileNode = {
-      name: fileName,
-      path: filePath,
-      isDirectory: false,
-      isSymlink: pathInfo.isSymlink,
-      parent: current,
-      gitStatus: gitStatus.get(normalized),
-      agentModified: agentModifiedFiles.has(filePath),
-      diffStats: diffStats.get(normalized),
-    };
-
-    current.children ??= [];
-    current.children.push(fileNode);
-    sortChildren(current);
-    browser.nodeByPath.set(filePath, fileNode);
-    return fileNode;
-  }
-
-  function addUntrackedNodes(): void {
-    for (const [relPath, status] of gitStatus.entries()) {
-      if (!isUntrackedStatus(status)) continue;
-      const node = ensureNode(relPath);
-      if (node) {
-        node.gitStatus = status;
-        node.diffStats = diffStats.get(relPath);
-        if (!node.isDirectory) {
-          queueLineCount(node, true);
-        }
-      }
-    }
-  }
-
   function refreshMetadata(): void {
-    if (!browser.root || !repo || gitRefreshGeneration === rootGeneration) return;
+    if (!browser.root || !repo || gitRefreshGeneration === rootSession.getGeneration()) return;
 
-    const generation = rootGeneration;
+    const generation = rootSession.getGeneration();
     const refreshRoot = rootPath;
     const previousDisplayList = getDisplayList();
     const currentPath = previousDisplayList[browser.selectedIndex]?.node.path;
@@ -973,7 +507,7 @@ export function createFileBrowser(
       retryFileList ? getGitFileListAsync(refreshRoot, gitAbort.signal) : Promise.resolve(null),
     ])
       .then(([statusResult, diffStatsResult, branch, fileListResult]) => {
-        if (generation !== rootGeneration) return;
+        if (!rootSession.isCurrent(generation)) return;
 
         if (statusResult.failed || fileListResult?.statusFailed) reportGitError("Git status");
         else clearGitError("Git status");
@@ -985,6 +519,7 @@ export function createFileBrowser(
         if (!statusResult.failed) gitStatus = statusResult.status;
         if (!diffStatsResult.failed) diffStats = diffStatsResult.stats;
         gitBranch = branch;
+        rootSession.setGitContext(gitStatus, diffStats, usesGitTree);
 
         // Keep the filesystem scan as the usable tree until every list needed
         // to build a Git tree succeeds. This includes the status half of the
@@ -993,11 +528,7 @@ export function createFileBrowser(
           usesGitTree = true;
           replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
         }
-        applyGitUpdates();
-        addUntrackedNodes();
-        applyAgentModified();
-        updateTreeStats(browser.root!);
-        browser.stats = getTreeStats(browser.root);
+        rootSession.applyGitMetadata(gitStatus, diffStats);
         refreshLists();
 
         const updatedDisplayList = getDisplayList();
@@ -1024,49 +555,28 @@ export function createFileBrowser(
   function loadRoot(newRoot: string): void {
     previewViewer.close();
     clearContentSearch();
-    rootGeneration += 1;
+    gitAbort.abort();
     gitAbort = new AbortController();
-    treeGeneration += 1;
     rootPath = resolve(newRoot);
     browser.errorMessage = null;
     gitErrors.clear();
 
-    const generation = rootGeneration;
     repo = false;
     usesGitTree = false;
     gitStatus = new Map();
     diffStats = new Map();
     gitBranch = "";
-
-    browser.root = {
-      name: ".",
-      path: rootPath,
-      isDirectory: true,
-      realPath: safeRealPathSync(rootPath),
-      children: undefined,
-      expanded: true,
-      hasChangedChildren: false,
-    };
-    browser.scanState.mode = "none";
-    browser.scanState.isScanning = true;
-    browser.scanState.isPartial = false;
-    browser.scanState.pending = 0;
-    indexNodes(browser.root, browser.nodeByPath);
+    rootSession.setGitContext(gitStatus, diffStats, usesGitTree);
+    const generation = rootSession.startRoot(rootPath);
     refreshLists();
-    browser.stats = getTreeStats(browser.root);
     browser.selectedIndex = 0;
     query.clear();
     browser.focusFirstChildOf = null;
     browser.lastPollTime = Date.now();
-    const safeMode = shouldSafeMode(rootPath);
-    browser.scanState.mode = safeMode ? "safe" : "full";
-    browser.scanState.isScanning = false;
-    browser.scanState.isPartial = safeMode;
-    if (browser.root) enqueueScan(browser.root, 0, true);
 
     void (async () => {
       const gitRepo = await isGitRepoAsync(rootPath, gitAbort.signal);
-      if (generation !== rootGeneration) return;
+      if (!rootSession.isCurrent(generation)) return;
 
       if (!gitRepo) {
         requestRender();
@@ -1079,7 +589,7 @@ export function createFileBrowser(
         getGitBranchAsync(rootPath, gitAbort.signal),
         getGitFileListAsync(rootPath, gitAbort.signal),
       ]);
-      if (generation !== rootGeneration) return;
+      if (!rootSession.isCurrent(generation)) return;
 
       if (statusResult.failed || fileListResult.statusFailed) reportGitError("Git status");
       else clearGitError("Git status");
@@ -1091,22 +601,19 @@ export function createFileBrowser(
       if (!statusResult.failed) gitStatus = statusResult.status;
       if (!diffStatsResult.failed) diffStats = diffStatsResult.stats;
       gitBranch = branch;
+      rootSession.setGitContext(gitStatus, diffStats, usesGitTree);
       // Preserve the provisional scan if either Git listing operation failed.
       // A later metadata refresh retries the listing before publishing a Git tree.
       if (!statusResult.failed && !fileListResult.failed) {
         usesGitTree = true;
         replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
       } else if (browser.root) {
-        applyGitUpdates();
-        addUntrackedNodes();
-        applyAgentModified();
-        updateTreeStats(browser.root);
-        browser.stats = getTreeStats(browser.root);
+        rootSession.applyGitMetadata(gitStatus, diffStats);
         refreshLists();
         restoreInitialPosition();
         scanPendingRestorePath();
       }
-      browser.stats = getTreeStats(browser.root);
+      rootSession.refreshStats();
       requestRender();
     })();
   }
@@ -1145,10 +652,6 @@ export function createFileBrowser(
     browser.selectedIndex = 0;
     browser.errorMessage = null;
     stopBackgroundTasks();
-    scanQueue.length = 0;
-    scanQueued.clear();
-    lineCountQueue.length = 0;
-    lineCountPending.clear();
     loadRoot(newRoot);
     requestRender();
   }
@@ -1177,9 +680,9 @@ export function createFileBrowser(
   function toggleDir(node: FileNode): void {
     if (node.isDirectory) {
       node.expanded = !node.expanded;
-      if (node.expanded && repo) queueLineCountsForDirectory(node);
+      if (node.expanded && repo) rootSession.queueLineCountsForDirectory(node);
       if (node.expanded && node.children === undefined) {
-        enqueueScan(node, getNodeDepth(node, rootPath), true);
+        rootSession.enqueueScan(node, rootSession.getNodeDepth(node), true);
       }
       refreshLists();
     }
@@ -1283,17 +786,17 @@ export function createFileBrowser(
         if (selected && options.togglePinnedRoot) {
           const path = selected.isDirectory ? selected.path : dirname(selected.path);
           const activeAnchor = rootAnchors[activeAnchorIndex];
-          const generation = rootGeneration;
+          const generation = rootSession.getGeneration();
           const requestGeneration = ++pinRequestGeneration;
           void options.togglePinnedRoot(path).then(result => {
-            if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
+            if (!rootSession.isCurrent(generation) || requestGeneration !== pinRequestGeneration) return;
             rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
               ? result.anchors
               : [...result.anchors, { id: activeAnchor.id, path: activeAnchor.path, label: activeAnchor.label, transient: true }];
             activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
             reportNotice(result.message);
           }).catch(error => {
-            if (generation === rootGeneration && requestGeneration === pinRequestGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
+            if (rootSession.isCurrent(generation) && requestGeneration === pinRequestGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
           });
         }
         return;
