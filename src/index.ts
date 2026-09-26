@@ -14,6 +14,7 @@ import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "nod
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
 import { getObservedToolActivityPath } from "./activity";
+import { createOverlayActivityPresenter, type OverlayActivityPresenter } from "./overlay-activity";
 import { sanitizeTerminalLabel } from "./utils";
 
 export function getRestoreBrowsePositionSettingsPath(agentDirectory = getAgentDir()): string {
@@ -217,12 +218,14 @@ export default function editorExtension(pi: ExtensionAPI): void {
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {
         let pollInterval: ReturnType<typeof setInterval> | null = null;
         let captureBrowsePosition: (() => void) | null = null;
+        let activityPresenter: OverlayActivityPresenter | null = null;
 
         const cleanup = () => {
           if (pollInterval) {
             clearInterval(pollInterval);
             pollInterval = null;
           }
+          activityPresenter?.dispose();
           if (restoreBrowsePosition) captureBrowsePosition?.();
           done();
         };
@@ -239,6 +242,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
         };
 
         const requestRender = () => tui.requestRender();
+        activityPresenter = createOverlayActivityPresenter(requestRender);
         const browser = createFileBrowser(
           initialRootPath,
           agentModifiedFiles,
@@ -282,7 +286,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
             return truncated + " ".repeat(Math.max(0, innerWidth - visibleWidth(truncated)));
           };
           const border = (character: string) => theme.fg("border", character);
-          const activity = browser.getActivityLabel();
+          const activity = activityPresenter?.present(browser.getActivityLabel(), browser.getBrowsePosition().rootPath) ?? browser.getActivityLabel();
           const copyHint = browser.isPathCopied() ? " Path copied" : browser.isPathCopyError() ? " Unable to copy path" : "";
           const restoredPath = browser.getRestorePath();
           const rootAnchor = browser.getRootAnchor();

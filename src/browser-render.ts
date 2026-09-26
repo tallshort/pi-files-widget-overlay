@@ -89,6 +89,7 @@ export function renderBrowserTree(model: BrowserRenderModel, width: number, them
       : "  (no files" + (model.query.query ? ` matching '${sanitizeTerminalLabel(model.query.query)}'` : "") + ")";
     lines.push(theme.fg("dim", emptyLabel));
     for (let index = 1; index < model.browserHeight; index++) lines.push("");
+    lines.push("");
   } else {
     const start = Math.max(0, Math.min(model.selectedIndex - Math.floor(model.browserHeight / 2), model.displayList.length - model.browserHeight));
     const end = Math.min(model.displayList.length, start + model.browserHeight);

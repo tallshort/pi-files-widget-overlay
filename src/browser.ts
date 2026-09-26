@@ -12,6 +12,7 @@ import {
   MAX_BROWSER_HEIGHT,
   MIN_PANEL_HEIGHT,
   POLL_INTERVAL_MS,
+  SCAN_ACTIVITY_LABEL,
 } from "./constants";
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
@@ -281,7 +282,7 @@ export function createFileBrowser(
 
   function activityLabels(): string[] {
     const labels: string[] = [];
-    if (browser.scanState.isScanning) labels.push("… scanning");
+    if (browser.scanState.isScanning) labels.push(SCAN_ACTIVITY_LABEL);
     if (browser.errorMessage) labels.push(`⚠ ${browser.errorMessage}`);
     if (noticeMessage) labels.push(noticeMessage);
     return labels;

@@ -13,6 +13,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
   copyToClipboard: vi.fn().mockResolvedValue(undefined),
 }));
 import { createFileBrowser } from "../src/browser.ts";
+import { createOverlayActivityPresenter } from "../src/overlay-activity.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
 import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, hasMultipleDistinctCommandRoots, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
 
@@ -474,7 +475,12 @@ describe("file browser expanded changed view", () => {
       { id: second, path: second, label: "Second" },
     ]);
     await waitForScanComplete(browser);
+    const renderedHeight = browser.render(160).length;
+    const activityPresenter = createOverlayActivityPresenter(() => {});
     browser.handleInput("\t");
+    expect(activityPresenter.present(browser.getActivityLabel(), browser.getBrowsePosition().rootPath)).toBe("");
+    expect(browser.render(160)).toHaveLength(renderedHeight);
+    activityPresenter.dispose();
     await waitFor(() => browser.getBrowsePosition().rootPath === second);
     expect(browser.getRootAnchor()).toEqual({ label: "Second", index: 2, count: 2 });
     browser.handleInput("\u001b[Z");
@@ -557,7 +563,7 @@ describe("file browser expanded changed view", () => {
   });
   it("sanitizes restore labels and reserves header room for scanning", () => {
     expect(sanitizeRestorePathLabel("safe\u001b[31mname")).toBe("safe�[31mname");
-    expect(getOverlayPathWidths(40, 10, "… scanning", true)).toEqual({ availableWidth: 18, rootWidth: 9 });
+    expect(getOverlayPathWidths(40, 10, "scanning...", true)).toEqual({ availableWidth: 17, rootWidth: 8 });
     expect(getOverlayPathWidths(40, 10, " Path copied", false).availableWidth).toBeLessThan(getOverlayPathWidths(40, 10, "", false).availableWidth);
   });
   it("sanitizes control characters in filesystem labels without changing the opened path", async () => {

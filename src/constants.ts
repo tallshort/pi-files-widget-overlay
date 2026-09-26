@@ -5,6 +5,7 @@ export const LINE_COUNT_BATCH_SIZE = 8;
 export const LINE_COUNT_BATCH_DELAY_MS = 30;
 export const SCAN_BATCH_SIZE = 4;
 export const SCAN_BATCH_DELAY_MS = 25;
+export const SCAN_ACTIVITY_LABEL = "scanning...";
 export const SAFE_MODE_ENTRY_THRESHOLD = 200;
 
 export const DEFAULT_VIEWER_HEIGHT = 29;

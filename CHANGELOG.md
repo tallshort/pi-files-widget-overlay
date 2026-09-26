@@ -10,6 +10,7 @@ All notable changes to this extension will be documented in this file.
 - Show Browser copy status in the visible preview or Files title as appropriate, report Browser and Viewer clipboard failures instead of silently ignoring them, and discard stale feedback after navigation.
 - Show Markdown `[RAW]` / `[RENDERED]` status alongside `[UNTRACKED]` for untracked Markdown files.
 - Keep aggregate line counts unknown while a root scan is pending, and avoid redundant line-count reads after Git tree replacement.
+- Keep the overlay height stable while switching roots and suppress brief scanning-indicator flashes.
 
 ## [0.8.0] - 2026-09-15
 
