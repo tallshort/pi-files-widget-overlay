@@ -47,6 +47,7 @@ interface ViewerState {
   lastLoadedMtimeMs: number | null;
   showFullHelp: boolean;
   selectable: boolean;
+  wrappable: boolean;
 }
 
 export interface ViewerController {
@@ -94,6 +95,7 @@ export function createViewer(
     lastLoadedMtimeMs: null,
     showFullHelp: false,
     selectable: true,
+    wrappable: false,
   };
 
   function isMarkdownFile(): boolean {
@@ -116,6 +118,7 @@ export function createViewer(
   function toggleMarkdownMode(): void {
     if (!isMarkdownFile() || state.diffMode) return;
     state.renderMarkdown = !state.renderMarkdown;
+    state.wrappable = false;
     state.lastRenderWidth = 0;
     search.reset();
     setMode("normal");
@@ -232,6 +235,7 @@ export function createViewer(
     state.renderedLines = result;
     viewport.setLayout(result.rowGroups, result.logicalLines.length);
     state.selectable = result.selectable !== false;
+    state.wrappable = result.wrappable !== false;
     if (!state.selectable) {
       state.rawContent = "";
       setMode("normal");
@@ -313,7 +317,7 @@ export function createViewer(
     } else if (isMarkdownFile()) {
       header += theme.fg("accent", state.renderMarkdown ? " [RENDERED]" : " [RAW]");
     }
-    header += theme.fg("accent", state.wordWrap ? " [WRAP]" : " [NO WRAP]");
+    if (state.wrappable) header += theme.fg("accent", state.wordWrap ? " [WRAP]" : " [NO WRAP]");
     if (state.mode === "select" || state.mode === "comment") {
       const bounds = viewport.selectionBounds();
       header += theme.fg("accent", ` [SELECT ${bounds.start + 1}-${bounds.end + 1}]`);
@@ -366,9 +370,10 @@ export function createViewer(
     } else {
       const markdownHelp = isMarkdownFile() && !state.diffMode ? "  m/r: raw/render" : "";
       const diffHelp = state.file?.gitStatus && !isUntrackedStatus(state.file.gitStatus) ? "  d: diff" : "";
+      const wrapHelp = state.wrappable ? "  w: wrap" : "";
       helpLines = state.showFullHelp
         ? [
-            "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  y: copy path",
+            `j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line${wrapHelp}  y: copy path`,
             `v: select${diffHelp}${markdownHelp}  []: change  +/-: height  ?: hide  q/Esc/←: back`,
           ]
         : [`/: search  n/N: match  v: select${markdownHelp}${diffHelp}  y: copy path  ?: help  q: back`];
@@ -418,6 +423,7 @@ export function createViewer(
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
       state.wordWrap = wordWrapByPath?.get(file.path) ?? false;
+      state.wrappable = false;
       state.showFullHelp = false;
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
@@ -444,6 +450,7 @@ export function createViewer(
         setMode("normal");
         viewport.setPosition(0, 0);
         state.renderMarkdown = !!file && isMarkdownPath(file.path);
+        state.wrappable = false;
         state.lastRenderWidth = 0;
         refreshRawContent();
       }
@@ -459,6 +466,7 @@ export function createViewer(
       state.rawContent = "";
       state.renderMarkdown = true;
       state.wordWrap = false;
+      state.wrappable = false;
       state.showFullHelp = false;
       state.lastLoadedMtimeMs = null;
       setMode("normal");
@@ -597,12 +605,15 @@ export function createViewer(
           copyPath();
           break;
         case "toggle-wrap":
-          state.wordWrap = !state.wordWrap;
-          if (state.file && wordWrapByPath) wordWrapByPath.set(state.file.path, state.wordWrap);
-          state.lastRenderWidth = 0;
+          if (state.wrappable) {
+            state.wordWrap = !state.wordWrap;
+            if (state.file && wordWrapByPath) wordWrapByPath.set(state.file.path, state.wordWrap);
+            state.lastRenderWidth = 0;
+          }
           break;
         case "toggle-diff":
           state.diffMode = !state.diffMode;
+          state.wrappable = false;
           state.lastRenderWidth = 0;
           viewport.setPosition(0, 0);
           break;

@@ -12,6 +12,7 @@ All notable changes to this extension will be documented in this file.
 - Keep aggregate line counts unknown while a root scan is pending, and avoid redundant line-count reads after Git tree replacement.
 - Keep the overlay height stable while switching roots and suppress brief scanning-indicator flashes.
 - Keep per-file word-wrap mode consistent when moving between Browser preview and the full Viewer.
+- Hide word-wrap controls for images and other fixed, non-text placeholders.
 
 ## [0.8.0] - 2026-09-15
 

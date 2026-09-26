@@ -93,6 +93,7 @@ function renderUnifiedDiff(diffOutput: string, width: number, theme: Theme, word
 export interface LoadedFileContent extends RenderedLines {
   renderedMarkdown: boolean;
   selectable?: boolean;
+  wrappable?: boolean;
 }
 type UnsafeFileKind = "binary" | "terminal-control";
 
@@ -114,12 +115,12 @@ function unsafeFilePlaceholder(kind: UnsafeFileKind, size: number): LoadedFileCo
     `Preview unavailable: ${kind} file.`,
     `Size: ${(size / 1024).toFixed(1)} KiB. Open the file externally to inspect it.`,
   ];
-  return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false };
+  return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false, wrappable: false };
 }
 
 function unsafeDiffPlaceholder(kind: UnsafeFileKind): LoadedFileContent {
   const lines = [`Diff preview unavailable: ${kind} content.`];
-  return { lines, rowGroups: [0], logicalLines: lines, renderedMarkdown: false, selectable: false };
+  return { lines, rowGroups: [0], logicalLines: lines, renderedMarkdown: false, selectable: false, wrappable: false };
 }
 
 export interface LoadFileContentOptions {
@@ -142,7 +143,7 @@ export function loadFileContent(
   try {
     try {
       if (statSync(filePath).isDirectory()) {
-        return { lines: ["Directory selected - expand it in the file tree instead of opening it."], rowGroups: [0], logicalLines: ["Directory selected - expand it in the file tree instead of opening it."], renderedMarkdown: false };
+        return { lines: ["Directory selected - expand it in the file tree instead of opening it."], rowGroups: [0], logicalLines: ["Directory selected - expand it in the file tree instead of opening it."], renderedMarkdown: false, wrappable: false };
       }
     } catch {
       // Ignore stat errors and fall through to normal handling
@@ -154,7 +155,7 @@ export function loadFileContent(
         `Image preview is unavailable in the overlay (${(size / 1024).toFixed(1)} KiB).`,
         "Open the file with an external image viewer instead.",
       ];
-      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false };
+      return { lines, rowGroups: lines.map((_, index) => index), logicalLines: lines, renderedMarkdown: false, selectable: false, wrappable: false };
     }
     const bytes = readFileSync(filePath);
     const unsafeKind = getUnsafeFileKind(bytes);
@@ -185,7 +186,7 @@ export function loadFileContent(
         }
 
         if (!diffOutput.trim()) {
-          return { lines: ["No diff available - file may be untracked or unchanged"], rowGroups: [0], logicalLines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false };
+          return { lines: ["No diff available - file may be untracked or unchanged"], rowGroups: [0], logicalLines: ["No diff available - file may be untracked or unchanged"], renderedMarkdown: false, wrappable: false };
         }
         const unsafeDiffKind = getUnsafeFileKind(Buffer.from(diffOutput, "utf-8"));
         if (unsafeDiffKind) return unsafeDiffPlaceholder(unsafeDiffKind);
@@ -193,7 +194,7 @@ export function loadFileContent(
         return { ...renderUnifiedDiff(diffOutput, termWidth, theme, wordWrap), renderedMarkdown: false };
       } catch (error: unknown) {
         const message = `Diff error: ${formatErrorMessage(error)}`;
-        return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false };
+        return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false, wrappable: false };
       }
     }
 
@@ -220,6 +221,6 @@ export function loadFileContent(
     return { lines, rowGroups, logicalLines: raw.split("\n"), renderedMarkdown: false };
   } catch (error: unknown) {
     const message = `Error loading file: ${formatErrorMessage(error)}`;
-    return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false };
+    return { lines: [message], rowGroups: [0], logicalLines: [message], renderedMarkdown: false, wrappable: false };
   }
 }

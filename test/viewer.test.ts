@@ -208,6 +208,21 @@ describe("file viewer word wrapping", () => {
     expect(loaded.logicalLines).toEqual(loaded.lines);
   });
 
+  it("does not advertise or toggle word wrap for an image placeholder", async () => {
+    const filePath = await createSourceFile(
+      new Uint8Array([0x89, 0x50, 0x4e, 0x47, 0x0d, 0x0a, 0x1a, 0x0a]),
+      "demo.png"
+    );
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "demo.png", path: filePath, isDirectory: false });
+
+    expect(viewer.render(80)[0]).not.toMatch(/\[(?:NO )?WRAP\]/);
+    viewer.handleInput("w");
+    expect(viewer.render(80)[0]).not.toMatch(/\[(?:NO )?WRAP\]/);
+    viewer.handleInput("?");
+    expect(viewer.render(80).join("\n")).not.toContain("w: wrap");
+  });
+
   it.each([
     ["binary", new Uint8Array([0x66, 0x6f, 0x6f, 0x00, 0xff])],
     ["terminal-control", new Uint8Array([0x1b, 0x5b, 0x33, 0x31, 0x6d, 0x72, 0x65, 0x64])],
@@ -235,6 +250,16 @@ describe("file viewer word wrapping", () => {
 
     expect(loaded.lines).toEqual(["Diff preview unavailable: terminal-control content."]);
     expect(loaded.lines.join("\n")).not.toContain("\u001b");
+
+    const wordWrapByPath = new Map<string, boolean>();
+    const viewer = createViewer({ getRoot: () => root, projectCwd: root, wordWrapByPath }, theme, () => {});
+    viewer.setFile({ name: "unsafe-diff.txt", path: filePath, isDirectory: false, gitStatus: "M" });
+    viewer.handleInput("d");
+    viewer.render(80);
+    viewer.handleInput("d");
+    viewer.handleInput("w");
+    expect(wordWrapByPath.has(filePath)).toBe(false);
+    expect(viewer.render(80)[0]).not.toMatch(/\[(?:NO )?WRAP\]/);
   });
   it("normalizes CRLF while rejecting a bare carriage return", async () => {
     const crlfPath = await createSourceFile("const first = 1;\r\nconst second = 2;\r\n", "crlf.ts");
@@ -305,10 +330,16 @@ describe("file viewer word wrapping", () => {
   it("keeps non-selectable previews navigable while blocking search, selection, and comments", async () => {
     const filePath = await createSourceFile(new Uint8Array([0x66, 0x6f, 0x6f, 0x00]), "blocked.txt");
     const comments: string[] = [];
-    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    const wordWrapByPath = new Map<string, boolean>();
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), wordWrapByPath }, theme, (_payload, comment) => comments.push(comment));
     viewer.setFile({ name: "blocked.txt", path: filePath, isDirectory: false, gitStatus: "M" });
+    viewer.handleInput("w");
+    expect(wordWrapByPath.has(filePath)).toBe(false);
     const fullHeight = viewer.render(80).length;
     expect(viewer.render(80)[0]).toContain("[DIFF]");
+    expect(viewer.render(80)[0]).not.toMatch(/\[(?:NO )?WRAP\]/);
+    viewer.handleInput("w");
+    expect(viewer.render(80)[0]).not.toMatch(/\[(?:NO )?WRAP\]/);
 
     expect(viewer.handleInput("]")).toEqual({ type: "navigate", direction: 1 });
     expect(viewer.handleInput("[")).toEqual({ type: "navigate", direction: -1 });
