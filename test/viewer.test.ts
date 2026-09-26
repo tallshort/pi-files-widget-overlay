@@ -108,6 +108,7 @@ describe("file viewer word wrapping", () => {
     await Promise.resolve();
     expect(viewer.render(100)[0]).toContain("Unable to copy path");
   });
+
   it("derives initial and maximum panel heights from terminal rows", () => {
     expect(getResponsivePanelHeight(28, 40, 9, 24)).toBe(11);
     expect(getResponsivePanelHeight(29, 50, 8, 60)).toBe(43);
@@ -139,7 +140,7 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(100).slice(-2).join("\n")).toContain("q/Esc/←: back");
     viewer.handleInput("?");
     expect(viewer.render(100).at(-1)).toContain("?: help");
-    expect(viewer.render(100).at(-1)).toContain("m: raw/render");
+    expect(viewer.render(100).at(-1)).toContain("m/r: raw/render");
 
     viewer.handleInput("/");
     expect(viewer.render(80)[0]).toContain(`/${CURSOR_MARKER}█`);
@@ -829,5 +830,25 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("\u0004");
 
     expect(comments[0]?.payload).toMatchObject({ lineRange: "line 1", selectedText: "# Title" });
+  });
+  it("toggles Markdown rendering with r", async () => {
+    const filePath = await createSourceFile("# Title\n\nText\n", "README.md");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    initTheme();
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    await new Promise(resolve => setTimeout(resolve, 20));
+
+    expect(viewer.render(100)[0]).toContain("[RENDERED]");
+    viewer.handleInput("r");
+    expect(viewer.render(100)[0]).toContain("[RAW]");
+    viewer.handleInput("r");
+    expect(viewer.render(100)[0]).toContain("[RENDERED]");
+    viewer.handleInput("m");
+    expect(viewer.render(100)[0]).toContain("[RAW]");
+
+    const sourcePath = await createSourceFile("const value = 1;\n", "source.ts");
+    viewer.setFile({ name: "source.ts", path: sourcePath, isDirectory: false });
+    viewer.handleInput("r");
+    expect(viewer.render(100)[0]).not.toContain("[RAW]");
   });
 });

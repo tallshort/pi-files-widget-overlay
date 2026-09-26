@@ -619,10 +619,10 @@ export function createViewer(
     } else if (state.showFullHelp) {
       helpLines = [
         "j/k/↑/↓: move  PgUp/PgDn/Ctrl-U/Ctrl-D: page  g/G: line  w: wrap  y: copy path",
-        "v: select  d: diff  m: render  []: change  +/-: height  ?: hide  q/Esc/←: back",
+        "v: select  d: diff  m/r: render  []: change  +/-: height  ?: hide  q/Esc/←: back",
       ];
     } else {
-      helpLines = ["/: search  n/N: match  v: select  m: raw/render  d: diff  y: copy path  ?: help  q: back"];
+      helpLines = ["/: search  n/N: match  v: select  m/r: raw/render  d: diff  y: copy path  ?: help  q: back"];
     }
     lines.push(...helpLines.map(line => truncateToWidth(theme.fg("dim", line), width)));
 
@@ -967,7 +967,7 @@ export function createViewer(
         state.cursor = 0;
         return { type: "none" };
       }
-      if (matchesKey(data, "m") && state.mode !== "select") {
+      if ((matchesKey(data, "m") || matchesKey(data, "r")) && state.mode !== "select") {
         toggleMarkdownMode();
         return { type: "none" };
       }
