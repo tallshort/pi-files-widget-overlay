@@ -1,5 +1,5 @@
 import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
-import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth, wrapTextWithAnsi } from "@earendil-works/pi-tui";
+import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
 import { relative, sep } from "node:path";
 
@@ -14,10 +14,10 @@ import {
 import { loadFileContent, type RenderedLines } from "./file-viewer";
 import type { FileNode } from "./types";
 import { isImagePath, isMarkdownPath, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
-import { createTextInputBuffer } from "./input-utils";
-
-const COMMENT_EDITOR_MAX_VISIBLE_LINES = 4;
-const COMMENT_CURSOR_SENTINEL_START = 0xe000;
+import { createViewerCommentEditor, type CommentScope } from "./viewer-comment-editor";
+import { classifyViewerInput, type ViewerInputCommand } from "./viewer-input";
+import { createViewerSearch } from "./viewer-search";
+import { createViewerViewport } from "./viewer-viewport";
 
 export interface CommentPayload {
   relPath: string;
@@ -39,24 +39,12 @@ interface ViewerState {
   file: FileNode | null;
   renderedLines: RenderedLines;
   rawContent: string;
-  scroll: number;
-  cursor: number;
   diffMode: boolean;
   renderMarkdown: boolean;
   wordWrap: boolean;
   mode: ViewerMode;
-  selectStart: number;
-  selectEnd: number;
-  commentText: string;
-  commentCursor: number;
-  commentScope: "selection" | "file";
-  searchQuery: string;
-  searchMatches: number[];
-  searchIndex: number;
   lastRenderWidth: number;
   lastLoadedMtimeMs: number | null;
-  height: number;
-  pendingCount: string;
   showFullHelp: boolean;
   selectable: boolean;
 }
@@ -89,32 +77,20 @@ export function createViewer(
   let pathCopiedUntil = 0;
   let copyErrorUntil = 0;
   let copyGeneration = 0;
-  const searchInput = createTextInputBuffer();
-  const commentInput = createTextInputBuffer({ preserveNewlines: true });
-  const commentSegmenter = new Intl.Segmenter(undefined, { granularity: "grapheme" });
+  const search = createViewerSearch();
+  const commentEditor = createViewerCommentEditor();
+  const viewport = createViewerViewport(getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8));
 
   const state: ViewerState = {
     file: null,
     renderedLines: { lines: [], rowGroups: [], logicalLines: [] },
     rawContent: "",
-    scroll: 0,
-    cursor: 0,
     diffMode: false,
     renderMarkdown: true,
     wordWrap: false,
     mode: "normal",
-    selectStart: 0,
-    selectEnd: 0,
-    commentText: "",
-    commentCursor: 0,
-    commentScope: "selection",
-    searchQuery: "",
-    searchMatches: [],
-    searchIndex: 0,
     lastRenderWidth: 0,
     lastLoadedMtimeMs: null,
-    height: getResponsivePanelHeight(DEFAULT_VIEWER_HEIGHT, MAX_VIEWER_HEIGHT, 8),
-    pendingCount: "",
     showFullHelp: false,
     selectable: true,
   };
@@ -130,10 +106,7 @@ export function createViewer(
   function switchMarkdownToRaw(): boolean {
     if (!isRenderedMarkdownMode()) return false;
     state.renderMarkdown = false;
-    state.cursor = 0;
-    state.selectStart = 0;
-    state.selectEnd = 0;
-    state.scroll = 0;
+    viewport.reset();
     const width = state.lastRenderWidth || process.stdout.columns || 80;
     reloadContent(width);
     return true;
@@ -143,79 +116,30 @@ export function createViewer(
     if (!isMarkdownFile() || state.diffMode) return;
     state.renderMarkdown = !state.renderMarkdown;
     state.lastRenderWidth = 0;
-    resetSearch();
+    search.reset();
     setMode("normal");
-    clampScroll();
-  }
-
-  function resetSearch(): void {
-    state.searchQuery = "";
-    state.searchMatches = [];
-    state.searchIndex = 0;
-  }
-
-  function commentGraphemes(text: string): string[] {
-    return Array.from(commentSegmenter.segment(text), ({ segment }) => segment);
-  }
-
-  function commentCursorSentinel(text: string): string {
-    for (let codePoint = COMMENT_CURSOR_SENTINEL_START; codePoint <= 0xf8ff; codePoint++) {
-      const sentinel = String.fromCodePoint(codePoint);
-      if (!text.includes(sentinel)) return sentinel;
-    }
-    throw new Error("Comment text exhausts cursor sentinels");
-  }
-
-  function resetComment(): void {
-    state.commentText = "";
-    state.commentCursor = 0;
-    state.commentScope = "selection";
-  }
-
-  function openComment(scope: "selection" | "file"): void {
-    state.commentScope = scope;
-    state.mode = "comment";
-    state.commentText = "";
-    state.commentCursor = 0;
-  }
-
-  function insertCommentText(text: string): void {
-    const graphemes = commentGraphemes(state.commentText);
-    const inserted = commentGraphemes(text);
-    graphemes.splice(state.commentCursor, 0, ...inserted);
-    state.commentText = graphemes.join("");
-    state.commentCursor += inserted.length;
-  }
-
-  function deleteCommentBackward(): void {
-    if (state.commentCursor === 0) return;
-    const graphemes = commentGraphemes(state.commentText);
-    graphemes.splice(state.commentCursor - 1, 1);
-    state.commentText = graphemes.join("");
-    state.commentCursor--;
   }
 
   function clearSelection(): void {
-    state.selectStart = 0;
-    state.selectEnd = 0;
+    viewport.clearSelection();
+  }
+
+  function openComment(scope: CommentScope): void {
+    commentEditor.open(scope);
+    state.mode = "comment";
   }
 
   function setMode(mode: ViewerMode, preserveSearch = false): void {
     if (mode !== state.mode) {
-      searchInput.reset();
-      commentInput.reset();
+      search.resetInput();
+      commentEditor.reset();
     }
-
     state.mode = mode;
-    if (mode !== "search" && !preserveSearch) resetSearch();
-    if (mode !== "comment") resetComment();
+    if (mode !== "search" && !preserveSearch) search.reset();
+    if (mode !== "comment") commentEditor.reset();
     if (mode === "normal") {
       clearSelection();
     }
-  }
-
-  function getMaxScroll(): number {
-    return Math.max(0, state.renderedLines.lines.length - state.height);
   }
 
   function refreshRawContent(): void {
@@ -248,85 +172,6 @@ export function createViewer(
       return state.lastLoadedMtimeMs !== null;
     }
   }
-
-  function clampScroll(): void {
-    state.scroll = Math.min(getMaxScroll(), Math.max(0, state.scroll));
-  }
-
-  function ensureCursorVisible(): void {
-    state.cursor = Math.min(Math.max(0, state.cursor), Math.max(0, state.renderedLines.lines.length - 1));
-    if (state.cursor < state.scroll) state.scroll = state.cursor;
-    if (state.cursor >= state.scroll + state.height) state.scroll = state.cursor - state.height + 1;
-    clampScroll();
-  }
-
-  function rowGroup(index: number): number {
-    return state.renderedLines.rowGroups[index] ?? index;
-  }
-
-  function groupStart(index: number): number {
-    const group = rowGroup(index);
-    while (index > 0 && rowGroup(index - 1) === group) index--;
-    return index;
-  }
-
-  function firstRowForGroup(group: number): number {
-    const row = state.renderedLines.rowGroups.indexOf(group);
-    return row === -1 ? Math.min(Math.max(0, group), Math.max(0, state.renderedLines.lines.length - 1)) : row;
-  }
-
-  function jumpToLine(lineNumber: number): void {
-    state.cursor = firstRowForGroup(Math.max(0, Math.min(lineNumber - 1, state.renderedLines.logicalLines.length - 1)));
-    ensureCursorVisible();
-  }
-
-  function takePendingLineNumber(): number | null {
-    const value = state.pendingCount ? Number(state.pendingCount) : null;
-    state.pendingCount = "";
-    return value && Number.isSafeInteger(value) ? value : null;
-  }
-
-  function groupEnd(index: number): number {
-    const group = rowGroup(index);
-    while (index + 1 < state.renderedLines.lines.length && rowGroup(index + 1) === group) index++;
-    return index;
-  }
-
-  function selectionBounds(): { start: number; end: number } {
-    return {
-      start: Math.min(rowGroup(state.selectStart), rowGroup(state.selectEnd)),
-      end: Math.max(rowGroup(state.selectStart), rowGroup(state.selectEnd)),
-    };
-  }
-
-  function moveCursor(direction: 1 | -1): void {
-    const next = stepGroup(state.cursor, direction);
-    if (next !== null) state.cursor = next;
-    ensureCursorVisible();
-  }
-
-  function stepGroup(index: number, direction: 1 | -1): number | null {
-    const next = direction > 0 ? groupEnd(index) + 1 : groupStart(index) - 1;
-    return next >= 0 && next < state.renderedLines.lines.length ? next : null;
-  }
-
-  function moveCursorByGroups(direction: 1 | -1, count: number): void {
-    for (let step = 0; step < count; step++) {
-      const next = stepGroup(state.cursor, direction);
-      if (next === null) break;
-      state.cursor = next;
-    }
-    ensureCursorVisible();
-  }
-
-  function moveViewportByRows(direction: 1 | -1, count: number): void {
-    const nextScroll = state.scroll + direction * count;
-    state.scroll = groupStart(Math.min(getMaxScroll(), Math.max(0, nextScroll)));
-    if (state.cursor < state.scroll || state.cursor >= state.scroll + state.height) {
-      state.cursor = state.scroll;
-    }
-  }
-
   function stripAnsi(text: string): string {
     return text.replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
   }
@@ -347,9 +192,10 @@ export function createViewer(
   }
 
   function captureRenderedMarkdownAnchor(): { text: string; rowOffset: number; viewportOffset: number } | null {
-    const paragraph = renderedMarkdownParagraphAt(state.cursor);
+    const { cursor, scroll } = viewport.snapshot();
+    const paragraph = renderedMarkdownParagraphAt(cursor);
     return paragraph && paragraph.text
-      ? { ...paragraph, viewportOffset: state.cursor - state.scroll }
+      ? { ...paragraph, viewportOffset: cursor - scroll }
       : null;
   }
 
@@ -373,9 +219,7 @@ export function createViewer(
     if (!state.file) return;
     const restoreRenderedMarkdown = isRenderedMarkdownMode() && state.lastRenderWidth !== 0 && state.lastRenderWidth !== width;
     const markdownAnchor = restoreRenderedMarkdown ? captureRenderedMarkdownAnchor() : null;
-    const cursorGroup = rowGroup(state.cursor);
-    const selectStartGroup = rowGroup(state.selectStart);
-    const selectEndGroup = rowGroup(state.selectEnd);
+    const viewportAnchor = viewport.captureAnchor();
     const preserveSelection = state.mode === "select" || state.mode === "comment";
     refreshRawContent();
     const hasChanges = !!state.file.gitStatus;
@@ -385,6 +229,7 @@ export function createViewer(
       theme
     );
     state.renderedLines = result;
+    viewport.setLayout(result.rowGroups, result.logicalLines.length);
     state.selectable = result.selectable !== false;
     if (!state.selectable) {
       state.rawContent = "";
@@ -394,79 +239,25 @@ export function createViewer(
       ? findRenderedMarkdownAnchor(markdownAnchor.text, markdownAnchor.rowOffset)
       : null;
     if (restoreRenderedMarkdown && result.renderedMarkdown) {
-      if (anchoredRow !== null) {
-        state.cursor = anchoredRow;
-        state.scroll = Math.max(0, anchoredRow - (markdownAnchor?.viewportOffset ?? 0));
-      } else {
-        state.cursor = 0;
-        state.scroll = 0;
-      }
+      viewport.setPosition(anchoredRow ?? 0, anchoredRow === null ? 0 : Math.max(0, anchoredRow - (markdownAnchor?.viewportOffset ?? 0)));
     } else {
-      state.cursor = firstRowForGroup(cursorGroup);
+      viewport.restoreAnchor(viewportAnchor, preserveSelection);
     }
-    if (preserveSelection) {
-      state.selectStart = firstRowForGroup(selectStartGroup);
-      state.selectEnd = firstRowForGroup(selectEndGroup);
-    }
-    ensureCursorVisible();
     state.renderMarkdown = result.renderedMarkdown;
     state.lastRenderWidth = width;
-    clampScroll();
-    if (state.searchQuery) {
-      updateSearchMatches({ preserveActiveMatch: true });
-    }
+    if (search.snapshot().query) revealSearchLine(search.refresh(searchableLines(), true));
   }
 
-  function updateSearchMatches(options: { preserveActiveMatch?: boolean } = {}): void {
-    const activeMatch = options.preserveActiveMatch ? state.searchMatches[state.searchIndex] : undefined;
+  function searchableLines(): string[] {
+    return state.diffMode ? state.renderedLines.logicalLines : state.rawContent.split("\n");
+  }
 
-    state.searchMatches = [];
-    if (!state.searchQuery) {
-      state.searchIndex = 0;
-      return;
-    }
-
-    const q = state.searchQuery.toLowerCase();
-    const searchableLines = state.diffMode ? state.renderedLines.logicalLines : state.rawContent.split("\n");
-    for (let i = 0; i < searchableLines.length; i++) {
-      if (searchableLines[i].replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").toLowerCase().includes(q)) {
-        state.searchMatches.push(i);
-      }
-    }
-
-    if (state.searchMatches.length === 0) {
-      state.searchIndex = 0;
-      return;
-    }
-
-    if (activeMatch === undefined) {
-      state.searchIndex = 0;
-    } else {
-      let nearestIndex = 0;
-      let nearestDistance = Number.POSITIVE_INFINITY;
-      for (let i = 0; i < state.searchMatches.length; i++) {
-        const distance = Math.abs(state.searchMatches[i] - activeMatch);
-        if (distance < nearestDistance) {
-          nearestDistance = distance;
-          nearestIndex = i;
-        }
-      }
-      state.searchIndex = nearestIndex;
-    }
-
-    state.cursor = firstRowForGroup(state.searchMatches[state.searchIndex]);
-    state.scroll = Math.max(0, state.cursor - SEARCH_SCROLL_OFFSET);
-    clampScroll();
+  function revealSearchLine(line: number | null): void {
+    if (line !== null) viewport.revealGroup(line, SEARCH_SCROLL_OFFSET);
   }
 
   function jumpToNextMatch(direction: 1 | -1): void {
-    if (state.searchMatches.length === 0) return;
-    state.searchIndex += direction;
-    if (state.searchIndex < 0) state.searchIndex = state.searchMatches.length - 1;
-    if (state.searchIndex >= state.searchMatches.length) state.searchIndex = 0;
-    state.cursor = firstRowForGroup(state.searchMatches[state.searchIndex]);
-    state.scroll = Math.max(0, state.cursor - SEARCH_SCROLL_OFFSET);
-    clampScroll();
+    revealSearchLine(search.move(direction));
   }
 
   function buildCommentPayload(): CommentPayload | null {
@@ -475,12 +266,12 @@ export function createViewer(
     const rel = relative(projectCwd, state.file.path);
     const relPath = !rel || rel === ".." || rel.startsWith(`..${sep}`) ? state.file.path : rel;
     const ext = state.diffMode ? "diff" : state.file.name.split(".").pop() || "";
-    if (state.commentScope === "file") {
+    if (commentEditor.getScope() === "file") {
       return { relPath, lineRange: "file", ext, selectedText: "", isFile: true };
     }
 
     const rawLines = state.rawContent.split("\n");
-    const bounds = selectionBounds();
+    const bounds = viewport.selectionBounds();
     const selectedText = state.diffMode
       ? state.renderedLines.logicalLines
           .slice(bounds.start, bounds.end + 1)
@@ -523,7 +314,7 @@ export function createViewer(
     }
     header += theme.fg("accent", state.wordWrap ? " [WRAP]" : " [NO WRAP]");
     if (state.mode === "select" || state.mode === "comment") {
-      const bounds = selectionBounds();
+      const bounds = viewport.selectionBounds();
       header += theme.fg("accent", ` [SELECT ${bounds.start + 1}-${bounds.end + 1}]`);
     }
 
@@ -542,67 +333,23 @@ export function createViewer(
       header += theme.fg("dim", ` ${state.file.lineCount}L`);
     }
 
+    const searchState = search.snapshot();
     if (state.mode === "search") {
-      header += theme.fg("accent", `  /${state.searchQuery}${CURSOR_MARKER}█`);
-    } else if (state.searchQuery) {
-      const searchPosition = state.searchMatches.length > 0
-        ? `${state.searchIndex + 1}/${state.searchMatches.length}`
+      header += theme.fg("accent", `  /${searchState.query}${CURSOR_MARKER}█`);
+    } else if (searchState.query) {
+      const searchPosition = searchState.matchCount > 0
+        ? `${searchState.matchIndex + 1}/${searchState.matchCount}`
         : "0/0";
-      header += theme.fg("dim", `  /${state.searchQuery}  (Esc clears) [${searchPosition}]`);
+      header += theme.fg("dim", `  /${searchState.query}  (Esc clears) [${searchPosition}]`);
     }
 
     return truncateToWidth(header, width);
   }
 
-  function renderCommentEditor(width: number): string[] {
-    const contentWidth = Math.max(1, width - 3);
-    const wrappedLines: string[] = [];
-    const graphemes = commentGraphemes(state.commentText);
-    const cursorSentinel = commentCursorSentinel(state.commentText);
-    const commentWithCursor = `${graphemes.slice(0, state.commentCursor).join("")}${cursorSentinel}${graphemes.slice(state.commentCursor).join("")}`;
-    const logicalLines = commentWithCursor.split("\n");
-
-    for (const line of logicalLines) {
-      if (line.length === 0) {
-        wrappedLines.push("");
-        continue;
-      }
-      wrappedLines.push(...wrapTextWithAnsi(line, contentWidth));
-    }
-
-    if (wrappedLines.length === 0) {
-      wrappedLines.push("█");
-    }
-
-    const cursorLineIndex = wrappedLines.findIndex(line => line.includes(cursorSentinel));
-    if (cursorLineIndex >= 0) {
-      const cursorColumn = wrappedLines[cursorLineIndex]!.indexOf(cursorSentinel);
-      wrappedLines[cursorLineIndex] = `${wrappedLines[cursorLineIndex]!.slice(0, cursorColumn)}${CURSOR_MARKER}█${wrappedLines[cursorLineIndex]!.slice(cursorColumn + cursorSentinel.length)}`;
-    }
-    const cursorLine = Math.max(0, cursorLineIndex);
-    const visibleStart = Math.min(
-      Math.max(0, cursorLine - COMMENT_EDITOR_MAX_VISIBLE_LINES + 1),
-      Math.max(0, wrappedLines.length - COMMENT_EDITOR_MAX_VISIBLE_LINES)
-    );
-    const visibleLines = wrappedLines.slice(visibleStart, visibleStart + COMMENT_EDITOR_MAX_VISIBLE_LINES);
-    if (visibleStart > 0 && visibleLines.length > 0) {
-      visibleLines[0] = `…${visibleLines[0]}`;
-    }
-
-    return [
-      truncateToWidth(theme.fg("accent", state.commentScope === "file" ? "Comment: whole file" : "Comment:"), width),
-      ...visibleLines.map(line => truncateToWidth(`  ${theme.fg("text", line)}`, width)),
-    ];
-  }
-
   function renderFooter(width: number): string[] {
     const lines: string[] = [];
-    const pct = state.renderedLines.lines.length > 0
-      ? Math.round((state.scroll / Math.max(1, state.renderedLines.lines.length - state.height)) * 100)
-      : 0;
-
     if (state.mode === "comment") {
-      lines.push(...renderCommentEditor(width));
+      lines.push(...commentEditor.render(width, theme));
       lines.push(theme.fg("border", "─".repeat(width)));
     }
 
@@ -666,15 +413,14 @@ export function createViewer(
       copyErrorUntil = 0;
       copyGeneration += 1;
       state.file = file;
-      state.scroll = 0;
-      state.cursor = 0;
+      viewport.reset();
       state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
       state.renderMarkdown = isMarkdownPath(file.path);
       state.wordWrap = false;
       state.showFullHelp = false;
-      state.pendingCount = "";
       setMode("normal");
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
+      viewport.setLayout([], 0);
       state.lastRenderWidth = 0;
       state.lastLoadedMtimeMs = null;
       refreshRawContent();
@@ -690,8 +436,7 @@ export function createViewer(
       if (state.diffMode && (!file?.gitStatus || isUntrackedStatus(file.gitStatus))) {
         state.diffMode = false;
         setMode("normal");
-        state.scroll = 0;
-        state.cursor = 0;
+        viewport.setPosition(0, 0);
         state.renderMarkdown = !!file && isMarkdownPath(file.path);
         state.lastRenderWidth = 0;
         refreshRawContent();
@@ -703,11 +448,12 @@ export function createViewer(
       copyGeneration += 1;
       state.file = null;
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
+      viewport.setLayout([], 0);
+      viewport.reset();
       state.rawContent = "";
       state.renderMarkdown = true;
       state.wordWrap = false;
       state.showFullHelp = false;
-      state.pendingCount = "";
       state.lastLoadedMtimeMs = null;
       setMode("normal");
     },
@@ -724,19 +470,19 @@ export function createViewer(
       lines.push(renderHeader(width));
       lines.push(theme.fg("borderMuted", "─".repeat(width)));
 
-      const visible = state.renderedLines.lines.slice(state.scroll, state.scroll + state.height);
-      for (let i = 0; i < state.height; i++) {
+      const { scroll, height } = viewport.snapshot();
+      const visible = state.renderedLines.lines.slice(scroll, scroll + height);
+      for (let i = 0; i < height; i++) {
         if (i < visible.length) {
-          const lineIdx = state.scroll + i;
+          const lineIdx = scroll + i;
           let line = truncateToWidth(visible[i] || "", width);
-          const group = rowGroup(lineIdx);
-          const bounds = selectionBounds();
-          const selected = (state.mode === "select" || state.mode === "comment") && group >= bounds.start && group <= bounds.end;
-          if (selected) {
-            const marker = lineIdx === groupEnd(state.selectEnd) ? "▸" : "┃";
+          const marker = (state.mode === "select" || state.mode === "comment")
+            ? viewport.selectionMarker(lineIdx)
+            : null;
+          if (marker) {
             const marked = line.replace("│", theme.fg("accent", marker));
             line = theme.bg("selectedBg", marked + " ".repeat(Math.max(0, width - visibleWidth(marked))));
-          } else if (!readOnly && group === rowGroup(state.cursor)) {
+          } else if (!readOnly && viewport.isCursorGroup(lineIdx)) {
             line = theme.bg("selectedBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
           }
           lines.push(line);
@@ -753,260 +499,127 @@ export function createViewer(
 
     handleInput(data: string): ViewerAction {
       if (!state.file) return { type: "none" };
-      const lineJump = matchesKey(data, "shift+g");
-      if (/^\d$/.test(data) && state.mode === "normal") {
-        state.pendingCount += data;
+      const searchState = search.snapshot();
+      const command: ViewerInputCommand = classifyViewerInput(data, {
+        mode: state.mode,
+        readOnly,
+        selectable: state.selectable,
+        hasSearchMatches: searchState.matchCount > 0,
+        canDiff: !!state.file.gitStatus && !isUntrackedStatus(state.file.gitStatus),
+      });
+      if (command.type === "count") {
+        viewport.appendCount(command.digit);
         return { type: "none" };
       }
-      const requestedLine = lineJump ? takePendingLineNumber() : null;
-      if (!lineJump) state.pendingCount = "";
-      if (readOnly) {
-        const halfPage = Math.max(1, Math.floor(state.height / 2));
-        if (matchesKey(data, "g")) state.cursor = 0;
-        else if (lineJump) {
-          if (requestedLine !== null) jumpToLine(requestedLine);
-          else state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
+      const requestedLine = command.type === "bottom-or-line" ? viewport.takeCount() : null;
+      if (command.type !== "bottom-or-line") viewport.clearCount();
+
+      switch (command.type) {
+        case "comment-input": {
+          const result = commentEditor.handleInput(data);
+          if (result.type === "finish") {
+            if (result.comment) sendComment(result.comment);
+            else setMode("normal");
+          } else if (result.type === "cancel") {
+            setMode("normal");
+          }
+          break;
         }
-        else if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) moveViewportByRows(1, halfPage);
-        else if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) moveViewportByRows(-1, halfPage);
-        else if (matchesKey(data, "w")) {
+        case "search-input": {
+          const result = search.handleInput(data, searchableLines());
+          if (result.type === "confirm") setMode("normal", true);
+          else if (result.type === "cancel") setMode("normal");
+          else revealSearchLine(result.line);
+          break;
+        }
+        case "toggle-help": {
+          state.showFullHelp = !state.showFullHelp;
+          const maximumHeight = getResponsivePanelHeight(
+            MAX_VIEWER_HEIGHT,
+            MAX_VIEWER_HEIGHT,
+            state.showFullHelp ? 9 : 8,
+            process.stdout.rows,
+            OVERLAY_MAX_HEIGHT_RATIO
+          );
+          viewport.resize(Math.min(viewport.snapshot().height, maximumHeight));
+          break;
+        }
+        case "close":
+          return { type: "close" };
+        case "back":
+          if (state.mode === "select") setMode("normal");
+          else if (search.snapshot().query) search.reset();
+          else return { type: "close" };
+          break;
+        case "start-search":
+          switchMarkdownToRaw();
+          search.reset();
+          setMode("search");
+          break;
+        case "search-match":
+          jumpToNextMatch(command.direction);
+          break;
+        case "move":
+        case "page":
+        case "top":
+          viewport.navigate(command, state.mode === "select");
+          break;
+        case "bottom-or-line":
+          if (requestedLine !== null && state.mode !== "select") {
+            viewport.navigate({ type: "line", lineNumber: requestedLine }, false);
+          } else {
+            viewport.navigate({ type: "bottom" }, state.mode === "select");
+          }
+          break;
+        case "resize": {
+          const currentHeight = viewport.snapshot().height;
+          if (command.direction < 0) {
+            viewport.resize(Math.max(MIN_PANEL_HEIGHT, currentHeight - 5));
+          } else {
+            const maximumHeight = getResponsivePanelHeight(
+              MAX_VIEWER_HEIGHT,
+              MAX_VIEWER_HEIGHT,
+              state.showFullHelp ? 9 : 8,
+              process.stdout.rows,
+              OVERLAY_MAX_HEIGHT_RATIO
+            );
+            viewport.resize(Math.min(maximumHeight, currentHeight + 5));
+          }
+          break;
+        }
+        case "copy-path":
+          copyPath();
+          break;
+        case "toggle-wrap":
           state.wordWrap = !state.wordWrap;
           state.lastRenderWidth = 0;
-        }
-        else return { type: "none" };
-        ensureCursorVisible();
-        return { type: "none" };
-      }
-
-      if (state.mode === "comment") {
-        if (matchesKey(data, "ctrl+enter") || matchesKey(data, "ctrl+d") || matchesKey(data, "alt+enter")) {
-          const comment = state.commentText.trim();
-          if (comment) {
-            sendComment(comment);
-          } else {
+          break;
+        case "toggle-diff":
+          state.diffMode = !state.diffMode;
+          state.lastRenderWidth = 0;
+          viewport.setPosition(0, 0);
+          break;
+        case "toggle-markdown":
+          toggleMarkdownMode();
+          break;
+        case "toggle-selection":
+          if (state.mode === "select") {
             setMode("normal");
-          }
-        } else if (matchesKey(data, Key.enter) || matchesKey(data, "shift+enter")) {
-          insertCommentText("\n");
-        } else if (matchesKey(data, Key.escape)) {
-          setMode("normal");
-        } else if (matchesKey(data, Key.left)) {
-          state.commentCursor = Math.max(0, state.commentCursor - 1);
-        } else if (matchesKey(data, Key.right)) {
-          state.commentCursor = Math.min(commentGraphemes(state.commentText).length, state.commentCursor + 1);
-        } else if (matchesKey(data, Key.backspace)) {
-          deleteCommentBackward();
-        } else {
-          const text = commentInput.push(data);
-          if (text) {
-            insertCommentText(text);
-          }
-        }
-        return { type: "none" };
-      }
-
-      if (state.mode === "search") {
-        if (matchesKey(data, "/")) {
-          resetSearch();
-          searchInput.reset();
-        } else if (matchesKey(data, Key.enter)) {
-          setMode("normal", true);
-        } else if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
-          setMode("normal");
-        } else if (matchesKey(data, Key.backspace)) {
-          if (state.searchQuery) {
-            state.searchQuery = state.searchQuery.slice(0, -1);
-            updateSearchMatches();
           } else {
-            setMode("normal");
+            switchMarkdownToRaw();
+            viewport.beginSelection();
+            state.mode = "select";
           }
-        } else {
-          const text = searchInput.push(data);
-          if (text) {
-            state.searchQuery += text;
-            updateSearchMatches();
-          }
-        }
-        return { type: "none" };
+          break;
+        case "comment":
+          openComment(command.scope);
+          break;
+        case "navigate-file":
+          return { type: "navigate", direction: command.direction };
+        case "none":
+          break;
       }
-
-      if (matchesKey(data, "?") && state.mode === "normal") {
-        state.showFullHelp = !state.showFullHelp;
-        const maximumHeight = getResponsivePanelHeight(
-          MAX_VIEWER_HEIGHT,
-          MAX_VIEWER_HEIGHT,
-          state.showFullHelp ? 9 : 8,
-          process.stdout.rows,
-          OVERLAY_MAX_HEIGHT_RATIO
-        );
-        state.height = Math.min(state.height, maximumHeight);
-        return { type: "none" };
-      }
-      if (matchesKey(data, "q") && state.mode !== "select") {
-        return { type: "close" };
-      }
-      if (matchesKey(data, Key.escape) || matchesKey(data, Key.left)) {
-        if (state.mode === "select") {
-          setMode("normal");
-        } else if (state.searchQuery) {
-          resetSearch();
-        } else {
-          return { type: "close" };
-        }
-        return { type: "none" };
-      }
-      if (!state.selectable && (matchesKey(data, "/") || matchesKey(data, "v") || matchesKey(data, "c") || matchesKey(data, "shift+c"))) {
-        return { type: "none" };
-      }
-      if (matchesKey(data, "/") && state.mode !== "select") {
-        switchMarkdownToRaw();
-        resetSearch();
-        setMode("search");
-        return { type: "none" };
-      }
-      if (matchesKey(data, "n") && state.mode !== "select" && state.searchMatches.length > 0) {
-        jumpToNextMatch(1);
-        return { type: "none" };
-      }
-      if (matchesKey(data, "shift+n") && state.mode !== "select" && state.searchMatches.length > 0) {
-        jumpToNextMatch(-1);
-        return { type: "none" };
-      }
-      if (matchesKey(data, "j") || matchesKey(data, Key.down)) {
-        if (state.mode === "select") {
-          const next = groupEnd(state.selectEnd) + 1;
-          if (next < state.renderedLines.lines.length) state.selectEnd = state.cursor = next;
-          ensureCursorVisible();
-        } else {
-          moveCursor(1);
-        }
-        return { type: "none" };
-      }
-      if (matchesKey(data, "k") || matchesKey(data, Key.up)) {
-        if (state.mode === "select") {
-          const previous = groupStart(state.selectEnd) - 1;
-          if (previous >= groupStart(state.selectStart)) state.selectEnd = state.cursor = previous;
-          ensureCursorVisible();
-        } else {
-          moveCursor(-1);
-        }
-        return { type: "none" };
-      }
-      const halfPage = Math.max(1, Math.floor(state.height / 2));
-      if (matchesKey(data, Key.pageDown) || matchesKey(data, "ctrl+d")) {
-        if (state.mode === "select") {
-          for (let step = 0; step < halfPage; step++) {
-            const next = stepGroup(state.selectEnd, 1);
-            if (next === null) break;
-            state.selectEnd = state.cursor = next;
-          }
-          ensureCursorVisible();
-        } else {
-          moveViewportByRows(1, halfPage);
-        }
-        ensureCursorVisible();
-        return { type: "none" };
-      }
-      if (matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+u")) {
-        if (state.mode === "select") {
-          const start = groupStart(state.selectStart);
-          for (let step = 0; step < halfPage; step++) {
-            const previous = stepGroup(state.selectEnd, -1);
-            if (previous === null || previous < start) break;
-            state.selectEnd = state.cursor = previous;
-          }
-          ensureCursorVisible();
-        } else {
-          moveViewportByRows(-1, halfPage);
-        }
-        ensureCursorVisible();
-        return { type: "none" };
-      }
-      if (matchesKey(data, "g")) {
-        if (state.mode === "select") {
-          state.selectEnd = state.selectStart;
-          state.cursor = state.selectStart;
-        } else {
-          state.cursor = 0;
-        }
-        ensureCursorVisible();
-        return { type: "none" };
-      }
-      if (lineJump) {
-        if (requestedLine !== null && state.mode !== "select") {
-          jumpToLine(requestedLine);
-        } else {
-          state.cursor = groupStart(Math.max(0, state.renderedLines.lines.length - 1));
-          if (state.mode === "select") state.selectEnd = state.cursor;
-          ensureCursorVisible();
-        }
-        return { type: "none" };
-      }
-      if (matchesKey(data, "+") || matchesKey(data, "=")) {
-        const maximumHeight = getResponsivePanelHeight(
-          MAX_VIEWER_HEIGHT,
-          MAX_VIEWER_HEIGHT,
-          state.showFullHelp ? 9 : 8,
-          process.stdout.rows,
-          OVERLAY_MAX_HEIGHT_RATIO
-        );
-        state.height = Math.min(maximumHeight, state.height + 5);
-        clampScroll();
-        return { type: "none" };
-      }
-      if (matchesKey(data, "-") || matchesKey(data, "_")) {
-        state.height = Math.max(MIN_PANEL_HEIGHT, state.height - 5);
-        clampScroll();
-        return { type: "none" };
-      }
-      if (matchesKey(data, "y") && state.mode === "normal") {
-        copyPath();
-        return { type: "none" };
-      }
-      if (matchesKey(data, "w") && state.mode !== "select") {
-        state.wordWrap = !state.wordWrap;
-        state.lastRenderWidth = 0;
-        return { type: "none" };
-      }
-      if (matchesKey(data, "d") && state.mode !== "select" && state.file.gitStatus && !isUntrackedStatus(state.file.gitStatus)) {
-        state.diffMode = !state.diffMode;
-        state.lastRenderWidth = 0;
-        state.scroll = 0;
-        state.cursor = 0;
-        return { type: "none" };
-      }
-      if ((matchesKey(data, "m") || matchesKey(data, "r")) && state.mode !== "select") {
-        toggleMarkdownMode();
-        return { type: "none" };
-      }
-      if (matchesKey(data, "v")) {
-        if (state.mode === "select") {
-          setMode("normal");
-          return { type: "none" };
-        }
-        switchMarkdownToRaw();
-        state.cursor = groupStart(state.cursor);
-        state.mode = "select";
-        state.selectStart = state.cursor;
-        state.selectEnd = state.cursor;
-        return { type: "none" };
-      }
-      if (matchesKey(data, "shift+c") && state.mode === "select") {
-        openComment("file");
-        return { type: "none" };
-      }
-      if (matchesKey(data, "c") && state.mode === "select") {
-        openComment("selection");
-        return { type: "none" };
-      }
-      if (matchesKey(data, "]") && state.mode !== "select") {
-        return { type: "navigate", direction: 1 };
-      }
-      if (matchesKey(data, "[") && state.mode !== "select") {
-        return { type: "navigate", direction: -1 };
-      }
-
       return { type: "none" };
-    },
+    }
   };
 }

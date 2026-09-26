@@ -54,10 +54,14 @@ src/index.ts
             ├─ src/git.ts: Git status, lists, stats, and repository-root translation
             └─ src/viewer.ts
                  ├─ src/file-viewer.ts: Pi-highlighted code, Pi Markdown, unified diff
+                 ├─ src/viewer-search.ts: viewer query input and match navigation
+                 ├─ src/viewer-comment-editor.ts: multiline comment input and rendering
+                 ├─ src/viewer-input.ts: ordered viewer key classification
+                 ├─ src/viewer-viewport.ts: cursor, scroll, height, counts, selection, and row-group navigation
                  └─ src/comment.ts: source and diff comment message formatting
 ```
 
-`src/index.ts` owns the overlay lifecycle and a periodic render request. `src/browser.ts` owns browser state, asynchronous scan generations, and routes input to `src/viewer.ts` while a file is open. `src/viewer.ts` owns cursor, viewport, selection, search, Markdown mode, comment-editor state, and viewer navigation.
+`src/index.ts` owns the overlay lifecycle and a periodic render request. `src/browser.ts` owns browser state, asynchronous scan generations, and routes input to `src/viewer.ts` while a file is open. `src/viewer.ts` owns the canonical viewer mode, file projection/loading, Markdown transitions, source-vs-diff mapping, rendering assembly, comment payload construction and delivery, and command coordination. Its ordered input classifier preserves key precedence without receiving viewer state. The viewport module owns cursor, scrolling, panel height, pending line counts, selection, and row-group navigation, and keeps the cursor visible across navigation and resizing; `viewer.ts` coordinates layout replacement and Markdown anchoring through that cohesive internal interface. Deep internal search and comment-editor modules own their input buffers and private editing state without receiving `ViewerState`.
 
 ## Rendering and dependencies
 

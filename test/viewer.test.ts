@@ -512,6 +512,28 @@ describe("file viewer word wrapping", () => {
     ]);
   });
 
+  it("gives active search and comment editing precedence over normal viewer commands", async () => {
+    const filePath = await createSourceFile("alpha\nbeta\n");
+    const comments: string[] = [];
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    viewer.setFile({ name: "precedence.ts", path: filePath, isDirectory: false });
+    viewer.render(80);
+
+    viewer.handleInput("/");
+    viewer.handleInput("qvny?");
+    expect(viewer.render(80)[0]).toContain(`/qvny?${CURSOR_MARKER}█`);
+    viewer.handleInput("\r");
+    expect(viewer.render(80)[0]).toContain("/qvny?  (Esc clears) [0/0]");
+    viewer.handleInput("\u001b");
+
+    viewer.handleInput("v");
+    viewer.handleInput("c");
+    viewer.handleInput("q/vn?[]dwmr");
+    viewer.handleInput("\u0004");
+
+    expect(comments).toEqual(["q/vn?[]dwmr"]);
+  });
+
   it("edits comments at the cursor without activating viewer navigation", async () => {
     const filePath = await createSourceFile();
     const comments: string[] = [];
