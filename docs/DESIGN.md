@@ -50,6 +50,10 @@ The browser uses a 28-line content area by default. The viewer uses 29 lines by 
 src/index.ts
   └─ registers /readfiles and hosts ctx.ui.custom(..., { overlay: true })
        └─ src/browser.ts
+            ├─ src/browser-input.ts: ordered browser key classification
+            ├─ src/browser-query.ts: browser query input and declarative search effects
+            ├─ src/browser-display.ts: pure display-list, location, and changed-navigation derivation
+            ├─ src/browser-render.ts: deterministic width-safe tree rendering
             ├─ src/file-tree.ts: tree nodes, scans, symlink handling, line counts
             ├─ src/git.ts: Git status, lists, stats, and repository-root translation
             └─ src/viewer.ts
@@ -61,7 +65,7 @@ src/index.ts
                  └─ src/comment.ts: source and diff comment message formatting
 ```
 
-`src/index.ts` owns the overlay lifecycle and a periodic render request. `src/browser.ts` owns browser state, asynchronous scan generations, and routes input to `src/viewer.ts` while a file is open. `src/viewer.ts` owns the canonical viewer mode, file projection/loading, Markdown transitions, source-vs-diff mapping, rendering assembly, comment payload construction and delivery, and command coordination. Its ordered input classifier preserves key precedence without receiving viewer state. The viewport module owns cursor, scrolling, panel height, pending line counts, selection, and row-group navigation, and keeps the cursor visible across navigation and resizing; `viewer.ts` coordinates layout replacement and Markdown anchoring through that cohesive internal interface. Deep internal search and comment-editor modules own their input buffers and private editing state without receiving `ViewerState`.
+`src/index.ts` owns the overlay lifecycle and a periodic render request. `src/browser.ts` remains the single owner of browser root and tree state, asynchronous scan generations, line counts, Git publication, content-search work, and re-root cancellation, and routes input to `src/viewer.ts` while a file is open. Browser input classification preserves the precedence of root switching, preview navigation, close/Escape, search entry and active query input, then normal commands. The query module owns its input buffer and returns declarative content-search effects for `browser.ts` to execute; display/location derivation and width-safe tree rendering are pure internal modules and do not own root state. `src/viewer.ts` owns the canonical viewer mode, file projection/loading, Markdown transitions, source-vs-diff mapping, rendering assembly, comment payload construction and delivery, and command coordination. Its ordered input classifier preserves key precedence without receiving viewer state. The viewport module owns cursor, scrolling, panel height, pending line counts, selection, and row-group navigation, and keeps the cursor visible across navigation and resizing; `viewer.ts` coordinates layout replacement and Markdown anchoring through that cohesive internal interface. Deep internal search and comment-editor modules own their input buffers and private editing state without receiving `ViewerState`.
 
 ## Rendering and dependencies
 

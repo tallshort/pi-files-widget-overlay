@@ -1,5 +1,5 @@
 import { copyToClipboard, createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
-import { CURSOR_MARKER, Key, matchesKey, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
+import { truncateToWidth } from "@earendil-works/pi-tui";
 import type { Dirent } from "node:fs";
 import { readdir, readFile, realpath, stat } from "node:fs/promises";
 import { homedir } from "node:os";
@@ -22,11 +22,14 @@ import {
 } from "./constants";
 import { getGitBranchAsync, getGitDiffStatsAsync, getGitFileListAsync, getGitStatusAsync, isGitRepoAsync } from "./git";
 import { buildFileTreeFromPaths, flattenTree, getIgnoredNames, sortChildren, updateTreeStats } from "./file-tree";
+import { deriveBrowserDisplayList, deriveBrowserLocation, deriveChangedNavigationTarget, expandChangedDirectories, restoreExpandedDirectories, type BrowserLocation } from "./browser-display";
+import { classifyBrowserInput, type BrowserInputCommand } from "./browser-input";
+import { createBrowserQuery, type BrowserQueryEffect } from "./browser-query";
+import { renderBrowserTree } from "./browser-render";
 import { getPathInfoSync, safeRealPathSync } from "./path-info";
 import type { DiffStats, FileNode, FlatNode } from "./types";
-import { formatErrorMessage, isIgnoredStatus, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
+import { formatErrorMessage, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createViewer, type CommentPayload, type ViewerAction } from "./viewer";
-import { createTextInputBuffer } from "./input-utils";
 
 const MIN_PREVIEW_WIDTH = 80;
 const CONTENT_SEARCH_DEBOUNCE_MS = 150;
@@ -60,11 +63,7 @@ export interface RootAnchor {
   transient?: boolean;
 }
 
-interface RootLocation {
-  rootPath: string;
-  directoryPath: string;
-  selectedFilePath: string | null;
-}
+type RootLocation = BrowserLocation;
 
 
 type ScanMode = "full" | "safe" | "none";
@@ -84,9 +83,6 @@ interface BrowserState {
   nodeByPath: Map<string, FileNode>;
   scanState: ScanState;
   selectedIndex: number;
-  searchQuery: string;
-  searchMode: boolean;
-  searchKind: "filename" | "content";
   contentMatches: Set<string>;
   showOnlyChanged: boolean;
   expandedChangedView: boolean;
@@ -98,10 +94,6 @@ interface BrowserState {
   lastPollTime: number;
 }
 
-interface ChangedFile {
-  file: FileNode;
-  ancestors: FileNode[];
-}
 
 
 function findNodeByPath(root: FileNode | null, path: string): FileNode | null {
@@ -177,21 +169,6 @@ function shouldSafeMode(path: string): boolean {
   return resolved === home || resolved === root;
 }
 
-function collectChangedFiles(node: FileNode, ancestors: FileNode[] = []): ChangedFile[] {
-  const results: ChangedFile[] = [];
-
-  if (!node.isDirectory && (node.gitStatus || node.agentModified)) {
-    results.push({ file: node, ancestors: [...ancestors] });
-  }
-
-  if (node.children) {
-    for (const child of node.children) {
-      results.push(...collectChangedFiles(child, [...ancestors, node]));
-    }
-  }
-
-  return results;
-}
 
 function getTreeStats(root: FileNode | null): BrowserStats {
   if (!root) {
@@ -205,65 +182,6 @@ function getTreeStats(root: FileNode | null): BrowserStats {
   };
 }
 
-function formatNodeStatus(node: FileNode, theme: Theme): string {
-  if (isIgnoredStatus(node.gitStatus)) return "";
-  if (node.agentModified) return theme.fg("accent", " 🤖");
-  if (node.gitStatus === "M" || node.gitStatus === "MM") return theme.fg("warning", " M");
-  if (isUntrackedStatus(node.gitStatus)) return theme.fg("dim", " ?");
-  if (node.gitStatus === "A") return theme.fg("success", " A");
-  if (node.gitStatus === "D") return theme.fg("error", " D");
-  return "";
-}
-
-function formatNodeMeta(node: FileNode, theme: Theme): string {
-  if (isIgnoredStatus(node.gitStatus)) return "";
-
-  const parts: string[] = [];
-
-  if (node.isDirectory && !node.expanded) {
-    if (node.totalAdditions && node.totalAdditions > 0) {
-      parts.push(theme.fg("success", `+${node.totalAdditions}`));
-    }
-    if (node.totalDeletions && node.totalDeletions > 0) {
-      parts.push(theme.fg("error", `-${node.totalDeletions}`));
-    }
-    if (node.totalLines && node.lineCountComplete !== false) {
-      parts.push(theme.fg("dim", `${node.totalLines}L`));
-    }
-  } else if (!node.isDirectory) {
-    if (node.diffStats) {
-      if (node.diffStats.additions > 0) {
-        parts.push(theme.fg("success", `+${node.diffStats.additions}`));
-      }
-      if (node.diffStats.deletions > 0) {
-        parts.push(theme.fg("error", `-${node.diffStats.deletions}`));
-      }
-    } else if (isUntrackedStatus(node.gitStatus) && node.lineCount !== undefined) {
-      parts.push(theme.fg("success", `+${node.lineCount}`));
-    }
-    if (node.lineCount !== undefined) {
-      parts.push(theme.fg("dim", `${node.lineCount}L`));
-    }
-  }
-
-  return parts.length > 0 ? ` ${parts.join(" ")}` : "";
-}
-
-function withSymlinkMarker(label: string, node: FileNode, theme: Theme): string {
-  return node.isSymlink ? `${label}${theme.fg("dim", " ↗")}` : label;
-}
-
-function formatNodeName(node: FileNode, theme: Theme): string {
-  const name = sanitizeTerminalLabel(node.name);
-  if (isIgnoredStatus(node.gitStatus)) return withSymlinkMarker(theme.fg("dim", name), node, theme);
-  if (node.isDirectory) {
-    const label = node.hasChangedChildren ? theme.fg("warning", name) : theme.fg("accent", name);
-    const rendered = withSymlinkMarker(label, node, theme);
-    return node.loading ? `${rendered}${theme.fg("dim", " ~")}` : rendered;
-  }
-  if (node.gitStatus) return withSymlinkMarker(theme.fg("warning", name), node, theme);
-  return withSymlinkMarker(theme.fg("text", name), node, theme);
-}
 
 function collapseAllExcept(node: FileNode, keep: Set<FileNode>): void {
   if (node.isDirectory) {
@@ -339,8 +257,7 @@ export function createFileBrowser(
   let pendingRestorePath = initialSelectedPath ? resolve(initialSelectedPath) : initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoredDirectoryPath = initialDirectoryPath ? resolve(initialDirectoryPath) : null;
   let restoreNotice = initialDirectoryPath ? relative(rootPath, resolve(initialDirectoryPath)) || "." : null;
-  const textInput = createTextInputBuffer();
-
+  const query = createBrowserQuery();
   const scanState: ScanState = {
     mode: "none",
     isScanning: false,
@@ -356,9 +273,6 @@ export function createFileBrowser(
     nodeByPath: new Map<string, FileNode>(),
     scanState,
     selectedIndex: 0,
-    searchQuery: "",
-    searchMode: false,
-    searchKind: "filename",
     contentMatches: new Set(),
     showOnlyChanged: false,
     expandedChangedView: false,
@@ -410,7 +324,7 @@ export function createFileBrowser(
   }
   function scheduleContentSearch(): void {
     clearContentSearch();
-    if (!browser.searchQuery) return;
+    if (!query.snapshot().query) return;
     contentSearchTimer = setTimeout(() => {
       contentSearchTimer = null;
       runContentSearch();
@@ -419,7 +333,8 @@ export function createFileBrowser(
 
   function runContentSearch(): void {
     clearContentSearch();
-    if (!browser.searchQuery) return;
+    const searchQuery = query.snapshot().query;
+    if (!searchQuery) return;
     const generation = contentSearchGeneration;
     const root = rootPath;
     const controller = new AbortController();
@@ -429,7 +344,7 @@ export function createFileBrowser(
       grep = createGrepTool(root);
       grepTools.set(root, grep);
     }
-    void grep.execute("readfiles-content-search", { pattern: browser.searchQuery, path: ".", literal: true, context: 0, limit: 200 }, controller.signal, () => {})
+    void grep.execute("readfiles-content-search", { pattern: searchQuery, path: ".", literal: true, context: 0, limit: 200 }, controller.signal, () => {})
       .then(result => {
         if (generation !== contentSearchGeneration || root !== rootPath) return;
         const matches = new Set<string>();
@@ -1140,10 +1055,8 @@ export function createFileBrowser(
     refreshLists();
     browser.stats = getTreeStats(browser.root);
     browser.selectedIndex = 0;
-    browser.searchQuery = "";
-    browser.searchMode = false;
+    query.clear();
     browser.focusFirstChildOf = null;
-    textInput.reset();
     browser.lastPollTime = Date.now();
     const safeMode = shouldSafeMode(rootPath);
     browser.scanState.mode = safeMode ? "safe" : "full";
@@ -1199,13 +1112,7 @@ export function createFileBrowser(
   }
 
   function currentLocation(): RootLocation {
-    const selected = getDisplayList()[browser.selectedIndex]?.node;
-    const selectedFilePath = selected && !selected.isDirectory ? selected.path : null;
-    return {
-      rootPath,
-      directoryPath: selected?.isDirectory ? selected.path : selectedFilePath ? dirname(selectedFilePath) : rootPath,
-      selectedFilePath,
-    };
+    return deriveBrowserLocation(rootPath, getDisplayList()[browser.selectedIndex]?.node);
   }
 
   function switchAnchor(index: number): void {
@@ -1231,8 +1138,7 @@ export function createFileBrowser(
     restoredDirectoryPath = restoreLocation?.directoryPath ?? null;
     restoreNotice = null;
     clearContentSearch();
-    browser.searchQuery = "";
-    browser.searchMode = false;
+    query.clear();
     browser.showOnlyChanged = false;
     browser.expandedChangedView = false;
     browser.expandedForChangedView.clear();
@@ -1250,66 +1156,22 @@ export function createFileBrowser(
   loadRoot(rootPath);
 
   function getDisplayList(): FlatNode[] {
-    let list = browser.searchQuery ? browser.fullList : browser.flatList;
-
-    if (browser.showOnlyChanged) {
-      list = list.filter(f => f.node.gitStatus || f.node.agentModified || (f.node.isDirectory && f.node.hasChangedChildren));
-    }
-
-    if (browser.searchQuery) {
-      if (browser.searchKind === "content") list = list.filter(item => !item.node.isDirectory && browser.contentMatches.has(item.node.path));
-      else {
-        const q = browser.searchQuery.toLowerCase();
-        list = list.filter(item => item.node.name.toLowerCase().includes(q));
-      }
-    }
-
-    return list;
+    return deriveBrowserDisplayList(browser, query.snapshot());
   }
 
   function navigateToChange(direction: 1 | -1): void {
     if (!browser.root) return;
-
     const displayList = getDisplayList();
-    const allChangedFiles = collectChangedFiles(browser.root);
-    const visiblePaths = new Set(displayList.map(item => item.node.path));
-    const changedFiles = browser.searchQuery
-      ? allChangedFiles.filter(change => visiblePaths.has(change.file.path))
-      : allChangedFiles;
-    if (changedFiles.length === 0) return;
-
-    const currentNode = displayList[browser.selectedIndex]?.node;
-
-    let currentIdx = -1;
-    if (currentNode && !currentNode.isDirectory) {
-      currentIdx = changedFiles.findIndex(c => c.file.path === currentNode.path);
-    }
-
-    let nextIdx: number;
-    if (currentIdx === -1) {
-      nextIdx = direction === 1 ? 0 : changedFiles.length - 1;
-    } else {
-      nextIdx = currentIdx + direction;
-      if (nextIdx < 0) nextIdx = changedFiles.length - 1;
-      if (nextIdx >= changedFiles.length) nextIdx = 0;
-    }
-
-    const target = changedFiles[nextIdx];
+    const target = deriveChangedNavigationTarget(browser.root, displayList, browser.selectedIndex, direction, Boolean(query.snapshot().query));
+    if (!target) return;
 
     const ancestorSet = new Set(target.ancestors);
     collapseAllExcept(browser.root, ancestorSet);
-
-    for (const ancestor of target.ancestors) {
-      ancestor.expanded = true;
-    }
-
+    for (const ancestor of target.ancestors) ancestor.expanded = true;
     browser.flatList = flattenTree(browser.root);
 
-    const newDisplayList = getDisplayList();
-    const targetIdx = newDisplayList.findIndex(f => f.node.path === target.file.path);
-    if (targetIdx !== -1) {
-      browser.selectedIndex = targetIdx;
-    }
+    const targetIndex = getDisplayList().findIndex(entry => entry.node.path === target.file.path);
+    if (targetIndex !== -1) browser.selectedIndex = targetIndex;
   }
 
   function toggleDir(node: FileNode): void {
@@ -1323,27 +1185,10 @@ export function createFileBrowser(
     }
   }
 
-  function expandChangedDirectories(node: FileNode): void {
-    if (!node.isDirectory || !node.hasChangedChildren) return;
-    if (!node.expanded) {
-      node.expanded = true;
-      browser.expandedForChangedView.add(node.path);
-    }
-    for (const child of node.children ?? []) {
-      expandChangedDirectories(child);
-    }
-  }
-
-  function restoreExpandedDirectories(node: FileNode): void {
-    if (browser.expandedForChangedView.delete(node.path)) node.expanded = false;
-    for (const child of node.children ?? []) {
-      restoreExpandedDirectories(child);
-    }
-  }
 
   function disableExpandedChangedView(): void {
     if (!browser.expandedChangedView) return;
-    if (browser.root) restoreExpandedDirectories(browser.root);
+    if (browser.root) restoreExpandedDirectories(browser.root, browser.expandedForChangedView);
     browser.expandedChangedView = false;
     refreshLists();
   }
@@ -1357,7 +1202,7 @@ export function createFileBrowser(
     }
     if (!browser.root) return;
     updateTreeStats(browser.root);
-    expandChangedDirectories(browser.root);
+    expandChangedDirectories(browser.root, browser.expandedForChangedView);
     browser.expandedChangedView = true;
     browser.showOnlyChanged = true;
     browser.selectedIndex = 0;
@@ -1369,103 +1214,19 @@ export function createFileBrowser(
   }
 
   function renderBrowser(width: number): string[] {
-    const lines: string[] = [];
-    const branchDisplay = gitBranch ? theme.fg("accent", ` (${sanitizeTerminalLabel(gitBranch)})`) : "";
-    const stats = browser.stats;
-
-    let statsDisplay = "";
-    if (stats.totalLines !== undefined) {
-      statsDisplay += theme.fg("dim", ` ${stats.totalLines}L`);
-    }
-    if (stats.additions > 0) statsDisplay += theme.fg("success", ` +${stats.additions}`);
-    if (stats.deletions > 0) statsDisplay += theme.fg("error", ` -${stats.deletions}`);
-
-    const partialIndicator = browser.scanState.isPartial ? theme.fg("warning", " [partial]") : "";
-    const errors = [browser.errorMessage, browser.contentSearchError, ...gitErrors].filter((message): message is string => Boolean(message));
-    const errorIndicator = errors.length > 0 ? theme.fg("error", ` [${errors.join("; ")}]`) : "";
-    const searchPrefix = browser.searchKind === "content" ? "@" : "/";
-    const searchIndicator = browser.searchMode
-      ? theme.fg("accent", `  ${searchPrefix}${sanitizeTerminalLabel(browser.searchQuery)}${CURSOR_MARKER}█`)
-      : browser.searchQuery
-        ? theme.fg("dim", `  ${searchPrefix}${sanitizeTerminalLabel(browser.searchQuery)}  (Esc clears)`)
-        : "";
-
-    const header = browser.searchMode || browser.searchQuery
-      ? errorIndicator + theme.bold(theme.fg("text", searchIndicator))
-      : branchDisplay + statsDisplay + partialIndicator + errorIndicator;
-    lines.push(truncateToWidth(header, width));
-    lines.push(theme.fg("borderMuted", "─".repeat(width)));
-
-    const displayList = getDisplayList();
-    if (displayList.length === 0) {
-      const emptyLabel = browser.scanState.isScanning
-        ? "  (loading...)"
-        : "  (no files" + (browser.searchQuery ? ` matching '${sanitizeTerminalLabel(browser.searchQuery)}'` : "") + ")";
-      lines.push(theme.fg("dim", emptyLabel));
-      for (let i = 1; i < browser.browserHeight; i++) {
-        lines.push("");
-      }
-    } else {
-      const start = Math.max(
-        0,
-        Math.min(browser.selectedIndex - Math.floor(browser.browserHeight / 2), displayList.length - browser.browserHeight)
-      );
-      const end = Math.min(displayList.length, start + browser.browserHeight);
-
-      for (let i = start; i < end; i++) {
-        const { node, depth } = displayList[i];
-        const isSelected = i === browser.selectedIndex;
-        const indent = "  ".repeat(depth);
-        const icon = node.isDirectory
-          ? (node.expanded ? "▾ " : "▸ ")
-          : "  ";
-
-        const status = formatNodeStatus(node, theme);
-        const meta = formatNodeMeta(node, theme);
-        const name = formatNodeName(node, theme);
-
-        const prefix = `${indent}${icon}`;
-        const statusWidth = visibleWidth(status);
-        const metaWidth = visibleWidth(meta);
-        const availableForName = Math.max(0, width - visibleWidth(prefix) - statusWidth - metaWidth);
-        const visibleMeta = availableForName >= 3 ? meta : "";
-        const nameWidth = Math.max(0, width - visibleWidth(prefix) - statusWidth - visibleWidth(visibleMeta));
-        let line = `${prefix}${truncateToWidth(name, nameWidth, "…")}${status}${visibleMeta}`;
-        line = truncateToWidth(line, width);
-
-        if (isSelected) {
-          line = theme.bg("selectedBg", line + " ".repeat(Math.max(0, width - visibleWidth(line))));
-        }
-
-        lines.push(line);
-      }
-
-      const renderedCount = end - start;
-      for (let i = renderedCount; i < browser.browserHeight; i++) {
-        lines.push("");
-      }
-
-      const pct = displayList.length > 1
-        ? Math.round((browser.selectedIndex / (displayList.length - 1)) * 100)
-        : 100;
-      lines.push(theme.fg("dim", `  ${browser.selectedIndex + 1}/${displayList.length} (${pct}%)`));
-    }
-
-    lines.push(theme.fg("borderMuted", "─".repeat(width)));
-    const changedIndicator = browser.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
-    const rootsHelp = rootAnchors.length > 1 ? "  Tab/Shift-Tab: roots" : "";
-    const help = browser.searchMode
-      ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
-      : theme.fg("dim", "j/k/↑/↓: move  Enter/l: open  h: back  /: filter  c/C: changes  ?: help") + changedIndicator;
-    const fullHelp = [
-      theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-      theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  p: preview  u: parent  .: root"),
-      theme.fg("dim", "*: pin/unpin  q/Esc: close  ?: hide  +/-: height" + rootsHelp) + changedIndicator,
-    ];
-    if (!browser.searchMode && showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
-    else lines.push(truncateToWidth(help, width));
-
-    return lines;
+    return renderBrowserTree({
+      stats: browser.stats,
+      scanState: browser.scanState,
+      errors: [browser.errorMessage, browser.contentSearchError, ...gitErrors].filter((message): message is string => Boolean(message)),
+      query: query.snapshot(),
+      displayList: getDisplayList(),
+      selectedIndex: browser.selectedIndex,
+      browserHeight: browser.browserHeight,
+      showOnlyChanged: browser.showOnlyChanged,
+      rootCount: rootAnchors.length,
+      showFullHelp,
+      gitBranch,
+    }, width, theme);
   }
 
   function handleViewerInput(data: string): void {
@@ -1485,240 +1246,191 @@ export function createFileBrowser(
     }
   }
 
-  function handleBrowserInput(data: string): void {
-    if (!browser.searchMode && rootAnchors.length > 1 && (matchesKey(data, Key.tab) || matchesKey(data, "shift+tab"))) {
-      const direction = matchesKey(data, "shift+tab") ? -1 : 1;
-      switchAnchor((activeAnchorIndex + direction + rootAnchors.length) % rootAnchors.length);
+  function applyQueryEffect(effect: BrowserQueryEffect, maxIndex: number): void {
+    if (effect.type === "move") {
+      browser.selectedIndex = Math.max(0, Math.min(maxIndex, browser.selectedIndex + effect.direction));
       return;
     }
-    const previewNavigation = /^\d$/.test(data) || matchesKey(data, "g") || matchesKey(data, "shift+g") || matchesKey(data, Key.pageDown) || matchesKey(data, Key.pageUp) || matchesKey(data, "ctrl+d") || matchesKey(data, "ctrl+u") || matchesKey(data, "w");
-    if (!browser.searchMode && previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen() && previewNavigation) {
-      previewViewer.handleInput(data);
-      return;
-    }
-    const displayList = getDisplayList();
-    const maxIndex = Math.max(0, displayList.length - 1);
-
-    if (matchesKey(data, "q") && !browser.searchMode) {
-      textInput.reset();
-      stopBackgroundTasks();
-      onClose();
-      return;
-    }
-    if (matchesKey(data, Key.escape)) {
-      if (browser.searchMode) {
-        browser.searchMode = false;
-        browser.searchQuery = "";
-        clearContentSearch();
-        textInput.reset();
-      } else if (browser.searchQuery) {
-        browser.searchQuery = "";
-        browser.selectedIndex = 0;
-        clearContentSearch();
-      } else {
-        textInput.reset();
-        stopBackgroundTasks();
-        onClose();
-      }
-      return;
-    }
-    if ((matchesKey(data, "/") || matchesKey(data, "@")) && !browser.searchMode) {
-      browser.searchMode = true;
-      browser.searchKind = matchesKey(data, "@") ? "content" : "filename";
-      browser.searchQuery = "";
+    if (effect.type === "cancel") {
       clearContentSearch();
-      textInput.reset();
       return;
     }
-    if (browser.searchMode) {
-      if (matchesKey(data, browser.searchKind === "content" ? "@" : "/")) {
-        browser.searchQuery = "";
-        browser.selectedIndex = 0;
-        if (browser.searchKind === "content") scheduleContentSearch();
-        textInput.reset();
-      } else if (matchesKey(data, Key.enter)) {
-        browser.searchMode = false;
-        textInput.reset();
-      } else if (matchesKey(data, Key.backspace)) {
-        if (browser.searchQuery) {
-          browser.searchQuery = browser.searchQuery.slice(0, -1);
-          browser.selectedIndex = 0;
-          if (browser.searchKind === "content") scheduleContentSearch();
-        } else {
-          browser.searchMode = false;
-          clearContentSearch();
-          textInput.reset();
-        }
-      } else if (matchesKey(data, Key.down)) {
-        browser.selectedIndex = Math.min(maxIndex, browser.selectedIndex + 1);
-      } else if (matchesKey(data, Key.up)) {
-        browser.selectedIndex = Math.max(0, browser.selectedIndex - 1);
-      } else {
-        const text = textInput.push(data);
-        if (text) {
-          browser.searchQuery += text;
-          browser.selectedIndex = 0;
-          if (browser.searchKind === "content") scheduleContentSearch();
-        }
+    if (effect.type !== "changed") return;
+    if (effect.resetSelection) browser.selectedIndex = 0;
+    if (effect.contentSearch === "schedule") scheduleContentSearch();
+    else if (effect.contentSearch === "clear") clearContentSearch();
+  }
+
+  function handleNormalBrowserCommand(command: BrowserInputCommand, displayList: FlatNode[], maxIndex: number): void {
+    const selected = displayList[browser.selectedIndex]?.node;
+    switch (command.type) {
+      case "toggle-help": {
+        showFullHelp = !showFullHelp;
+        const maximumHeight = getResponsivePanelHeight(
+          MAX_BROWSER_HEIGHT,
+          MAX_BROWSER_HEIGHT,
+          showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
+          process.stdout.rows,
+          OVERLAY_MAX_HEIGHT_RATIO
+        );
+        browser.browserHeight = Math.min(browser.browserHeight, maximumHeight);
+        return;
       }
-      return;
-    }
-    if (matchesKey(data, "?")) {
-      showFullHelp = !showFullHelp;
-      const maximumHeight = getResponsivePanelHeight(
-        MAX_BROWSER_HEIGHT,
-        MAX_BROWSER_HEIGHT,
-        showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
-        process.stdout.rows,
-        OVERLAY_MAX_HEIGHT_RATIO
-      );
-      browser.browserHeight = Math.min(browser.browserHeight, maximumHeight);
-      return;
-    }
-    if (matchesKey(data, "p")) {
-      if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
-      return;
-    }
-    if (matchesKey(data, "*")) {
-      const selected = displayList[browser.selectedIndex]?.node;
-      if (selected && options.togglePinnedRoot) {
-        const path = selected.isDirectory ? selected.path : dirname(selected.path);
-        const activeAnchor = rootAnchors[activeAnchorIndex];
-        const generation = rootGeneration;
-        const requestGeneration = ++pinRequestGeneration;
-        void options.togglePinnedRoot(path).then(result => {
-          if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
-          rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
-            ? result.anchors
-            : [...result.anchors, { id: activeAnchor.id, path: activeAnchor.path, label: activeAnchor.label, transient: true }];
-          activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
-          reportNotice(result.message);
-        }).catch(error => {
-          if (generation === rootGeneration && requestGeneration === pinRequestGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
-        });
-      }
-      return;
-    }
-    if (matchesKey(data, "y")) {
-      const selected = displayList[browser.selectedIndex]?.node;
-      if (selected) {
+      case "toggle-preview":
+        if (lastRenderWidth >= MIN_PREVIEW_WIDTH) previewEnabled = !previewEnabled;
+        return;
+      case "toggle-pin":
+        if (selected && options.togglePinnedRoot) {
+          const path = selected.isDirectory ? selected.path : dirname(selected.path);
+          const activeAnchor = rootAnchors[activeAnchorIndex];
+          const generation = rootGeneration;
+          const requestGeneration = ++pinRequestGeneration;
+          void options.togglePinnedRoot(path).then(result => {
+            if (generation !== rootGeneration || requestGeneration !== pinRequestGeneration) return;
+            rootAnchors = !activeAnchor || result.anchors.some(anchor => anchor.path === activeAnchor.path)
+              ? result.anchors
+              : [...result.anchors, { id: activeAnchor.id, path: activeAnchor.path, label: activeAnchor.label, transient: true }];
+            activeAnchorIndex = Math.max(0, rootAnchors.findIndex(anchor => anchor.path === activeAnchor?.path));
+            reportNotice(result.message);
+          }).catch(error => {
+            if (generation === rootGeneration && requestGeneration === pinRequestGeneration) reportError(`Unable to update pinned roots: ${formatErrorMessage(error)}`);
+          });
+        }
+        return;
+      case "copy-path":
+        if (!selected) return;
         if (previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewPath === selected.path && previewViewer.isOpen()) {
           const generation = ++copyGeneration;
           copyFeedbackOwner = "preview";
           previewViewer.copyPath(success => finishCopyFeedback(generation, success));
           return;
         }
-        const generation = ++copyGeneration;
-        copyFeedbackOwner = "browser";
-        void copyToClipboard(selected.path).then(
-          () => finishCopyFeedback(generation, true),
-          () => finishCopyFeedback(generation, false),
-        );
+        {
+          const generation = ++copyGeneration;
+          copyFeedbackOwner = "browser";
+          void copyToClipboard(selected.path).then(
+            () => finishCopyFeedback(generation, true),
+            () => finishCopyFeedback(generation, false),
+          );
+        }
+        return;
+      case "parent-root": {
+        const parent = resolve(rootPath, "..");
+        if (parent !== rootPath) setRoot(parent);
+        return;
       }
-      return;
-    }
-    if (matchesKey(data, "u")) {
-      const parent = resolve(rootPath, "..");
-      if (parent !== rootPath) {
-        setRoot(parent);
-      }
-      return;
-    }
-    if (matchesKey(data, ".")) {
-      if (rootPath !== initialRoot) {
-        setRoot(initialRoot);
-      }
-      return;
-    }
-    if (matchesKey(data, "j") || matchesKey(data, Key.down)) {
-      browser.selectedIndex = Math.min(maxIndex, browser.selectedIndex + 1);
-      return;
-    }
-    if (matchesKey(data, "k") || matchesKey(data, Key.up)) {
-      browser.selectedIndex = Math.max(0, browser.selectedIndex - 1);
-      return;
-    }
-    if (matchesKey(data, Key.enter)) {
-      const item = displayList[browser.selectedIndex];
-      if (item) {
-        if (item.node.isDirectory) {
-          toggleDir(item.node);
+      case "initial-root":
+        if (rootPath !== initialRoot) setRoot(initialRoot);
+        return;
+      case "move":
+        browser.selectedIndex = Math.max(0, Math.min(maxIndex, browser.selectedIndex + command.direction));
+        return;
+      case "open":
+        if (selected?.isDirectory) toggleDir(selected);
+        else if (selected) openFile(selected);
+        return;
+      case "expand-or-open":
+        if (selected?.isDirectory && !selected.expanded) {
+          toggleDir(selected);
+          if (!focusFirstChild(selected)) browser.focusFirstChildOf = selected.path;
+        } else if (selected && !selected.isDirectory) {
+          openFile(selected);
+        }
+        return;
+      case "collapse":
+        if (selected?.isDirectory && selected.expanded) {
+          toggleDir(selected);
         } else {
-          openFile(item.node);
+          const parent = selected?.parent;
+          if (parent && parent !== browser.root && parent.expanded) {
+            parent.expanded = false;
+            refreshLists();
+            const parentIndex = getDisplayList().findIndex(entry => entry.node.path === parent.path);
+            if (parentIndex !== -1) browser.selectedIndex = parentIndex;
+          }
         }
-      }
-      return;
-    }
-    if (matchesKey(data, "l") || matchesKey(data, Key.right)) {
-      const item = displayList[browser.selectedIndex];
-      if (item?.node.isDirectory && !item.node.expanded) {
-        toggleDir(item.node);
-        if (!focusFirstChild(item.node)) browser.focusFirstChildOf = item.node.path;
-      } else if (item && !item.node.isDirectory) {
-        openFile(item.node);
-      }
-      return;
-    }
-    if (matchesKey(data, "h") || matchesKey(data, Key.left)) {
-      const item = displayList[browser.selectedIndex];
-      if (item?.node.isDirectory && item.node.expanded) {
-        toggleDir(item.node);
-      } else {
-        const parent = item?.node.parent;
-        if (parent && parent !== browser.root && parent.expanded) {
-          parent.expanded = false;
-          refreshLists();
-          const parentIndex = getDisplayList().findIndex(entry => entry.node.path === parent.path);
-          if (parentIndex !== -1) browser.selectedIndex = parentIndex;
+        return;
+      case "page":
+        browser.selectedIndex = Math.max(0, Math.min(maxIndex, browser.selectedIndex + command.direction * browser.browserHeight));
+        return;
+      case "resize":
+        if (command.direction === -1) {
+          browser.browserHeight = Math.max(MIN_PANEL_HEIGHT, browser.browserHeight - 5);
+        } else {
+          const maximumHeight = getResponsivePanelHeight(
+            MAX_BROWSER_HEIGHT,
+            MAX_BROWSER_HEIGHT,
+            showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
+            process.stdout.rows,
+            OVERLAY_MAX_HEIGHT_RATIO
+          );
+          browser.browserHeight = Math.min(maximumHeight, browser.browserHeight + 5);
         }
-      }
-      return;
+        return;
+      case "toggle-expanded-changes":
+        toggleExpandedChangedView();
+        return;
+      case "toggle-changes":
+        if (browser.showOnlyChanged) {
+          const wasExpanded = browser.expandedChangedView;
+          disableExpandedChangedView();
+          browser.showOnlyChanged = wasExpanded;
+        } else {
+          browser.showOnlyChanged = true;
+        }
+        browser.selectedIndex = 0;
+        return;
+      case "navigate-change":
+        navigateToChange(command.direction);
+        return;
+      default:
+        return;
     }
-    if (matchesKey(data, Key.pageDown)) {
-      browser.selectedIndex = Math.min(maxIndex, browser.selectedIndex + browser.browserHeight);
-      return;
-    }
-    if (matchesKey(data, Key.pageUp)) {
-      browser.selectedIndex = Math.max(0, browser.selectedIndex - browser.browserHeight);
-      return;
-    }
-    if (matchesKey(data, "+") || matchesKey(data, "=")) {
-      const maximumHeight = getResponsivePanelHeight(
-        MAX_BROWSER_HEIGHT,
-        MAX_BROWSER_HEIGHT,
-        showFullHelp ? FULL_BROWSER_CHROME_ROWS : COMPACT_BROWSER_CHROME_ROWS,
-        process.stdout.rows,
-        OVERLAY_MAX_HEIGHT_RATIO
-      );
-      browser.browserHeight = Math.min(maximumHeight, browser.browserHeight + 5);
-      return;
-    }
-    if (matchesKey(data, "-") || matchesKey(data, "_")) {
-      browser.browserHeight = Math.max(MIN_PANEL_HEIGHT, browser.browserHeight - 5);
-      return;
-    }
-    if (matchesKey(data, "shift+c")) {
-      toggleExpandedChangedView();
-      return;
-    }
-    if (matchesKey(data, "c")) {
-      if (browser.showOnlyChanged) {
-        const wasExpanded = browser.expandedChangedView;
-        disableExpandedChangedView();
-        browser.showOnlyChanged = wasExpanded;
-      } else {
-        browser.showOnlyChanged = true;
-      }
-      browser.selectedIndex = 0;
-      return;
-    }
-    if (matchesKey(data, "]")) {
-      navigateToChange(1);
-      return;
-    }
-    if (matchesKey(data, "[")) {
-      navigateToChange(-1);
-      return;
+  }
+
+  function handleBrowserInput(data: string): void {
+    const queryState = query.snapshot();
+    const command = classifyBrowserInput(data, {
+      queryActive: queryState.active,
+      multipleRoots: rootAnchors.length > 1,
+      previewActive: previewEnabled && lastRenderWidth >= MIN_PREVIEW_WIDTH && previewViewer.isOpen(),
+    });
+    const displayList = getDisplayList();
+    const maxIndex = Math.max(0, displayList.length - 1);
+
+    switch (command.type) {
+      case "switch-root":
+        switchAnchor((activeAnchorIndex + command.direction + rootAnchors.length) % rootAnchors.length);
+        return;
+      case "preview-input":
+        previewViewer.handleInput(data);
+        return;
+      case "close":
+        stopBackgroundTasks();
+        onClose();
+        return;
+      case "escape":
+        if (queryState.active) {
+          query.clear();
+          clearContentSearch();
+        } else if (queryState.query) {
+          query.clearRetained();
+          browser.selectedIndex = 0;
+          clearContentSearch();
+        } else {
+          stopBackgroundTasks();
+          onClose();
+        }
+        return;
+      case "start-search":
+        query.start(command.kind);
+        clearContentSearch();
+        return;
+      case "query-input":
+        applyQueryEffect(query.handleInput(data), maxIndex);
+        return;
+      default:
+        handleNormalBrowserCommand(command, displayList, maxIndex);
     }
   }
 
@@ -1742,7 +1454,7 @@ export function createFileBrowser(
       previewPath = null;
     }
 
-    const footerLineCount = !browser.searchMode && showFullHelp ? 4 : 2;
+    const footerLineCount = !query.snapshot().active && showFullHelp ? 4 : 2;
     const treeLines = renderBrowser(treeWidth);
     const treeContent = treeLines.slice(0, -footerLineCount);
     const fullWidthFooter = renderBrowser(width).slice(-footerLineCount);
@@ -1767,13 +1479,7 @@ export function createFileBrowser(
       return { label: anchor.label, ...(anchor.pinned ? { pinned: true } : {}), index: activeAnchorIndex + 1, count: rootAnchors.length };
     },
     getBrowsePosition(): { rootPath: string; directoryPath: string; selectedFilePath: string | null } {
-      const selected = getDisplayList()[browser.selectedIndex]?.node;
-      const selectedFilePath = selected && !selected.isDirectory ? selected.path : null;
-      return {
-        rootPath,
-        directoryPath: selected?.isDirectory ? selected.path : selectedFilePath ? dirname(selectedFilePath) : rootPath,
-        selectedFilePath,
-      };
+      return deriveBrowserLocation(rootPath, getDisplayList()[browser.selectedIndex]?.node);
     },
 
     isPathCopied(): boolean {
