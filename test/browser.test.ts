@@ -219,9 +219,13 @@ describe("file browser expanded changed view", () => {
     ]);
     await waitForScanComplete(browser);
 
-    expect(browser.render(160).at(-1)).not.toContain("Tab/Shift-Tab: roots");
+    expect(browser.render(160).at(-1)).not.toContain("Tab/⇧Tab: roots");
     browser.handleInput("?");
-    expect(browser.render(160).slice(-3).join("\n")).toContain("Tab/Shift-Tab: roots");
+    expect(browser.render(160).slice(-3).join("\n")).toContain("Tab/⇧Tab: roots");
+    browser.handleInput("c");
+    const changedHelp = browser.render(160).slice(-3);
+    expect(changedHelp.join("\n")).toContain("[changed]");
+    expect(changedHelp.every(line => visibleWidth(line) <= 79)).toBe(true);
   });
 
   it("keeps top-level directories with only deep tracked paths", async () => {
@@ -787,12 +791,17 @@ describe("file browser expanded changed view", () => {
     expect(wide.at(-1)).not.toContain("*: pin");
     expect(wide.at(-1)).not.toContain("│");
     browser.handleInput("?");
-    const fullHelp = browser.render(100).slice(-3).join("\n");
+    const fullHelpLines = browser.render(100).slice(-3);
+    const fullHelp = fullHelpLines.join("\n");
     expect(fullHelp).toContain("j/k/↑/↓: move");
     expect(fullHelp).toContain("Enter: open");
     expect(fullHelp).toContain("h/l←→: folder");
     expect(fullHelp).toContain("c: changed only");
-    expect(fullHelp).toContain("*: pin/unpin");
+    expect(fullHelp).toContain("C: expand changes");
+    expect(fullHelpLines[1]).toContain("p: preview  u: parent");
+    expect(fullHelpLines[2]).toContain(".: root  *: pin");
+    expect(fullHelpLines.every(line => visibleWidth(line) <= 79)).toBe(true);
+    expect(fullHelp).toContain("*: pin");
     expect(fullHelp).toContain("?: hide");
     expect(fullHelp).toContain("q/Esc: close");
     const narrowHelp = browser.render(24).slice(-3);

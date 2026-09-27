@@ -114,15 +114,15 @@ export function renderBrowserTree(model: BrowserRenderModel, width: number, them
   }
 
   lines.push(theme.fg("borderMuted", "─".repeat(width)));
-  const changedIndicator = model.showOnlyChanged ? theme.fg("warning", " [changed only]") : "";
-  const rootsHelp = model.rootCount > 1 ? "  Tab/Shift-Tab: roots" : "";
+  const changedIndicator = model.showOnlyChanged ? theme.fg("warning", " [changed]") : "";
+  const rootsHelp = model.rootCount > 1 ? "  Tab/⇧Tab: roots" : "";
   const help = model.query.active
     ? theme.fg("dim", "Type to search  ↑↓: nav  Enter: confirm  Esc: cancel")
     : theme.fg("dim", "j/k/↑/↓: move  Enter/l: open  h: back  /: filter  c/C: changes  ?: help") + changedIndicator;
   const fullHelp = [
     theme.fg("dim", "j/k/↑/↓: move  Enter: open  h/l←→: folder  PgUp/PgDn: page  c: changed only"),
-    theme.fg("dim", "C: expand  []: change  /:@ search  y: copy path  p: preview  u: parent  .: root"),
-    theme.fg("dim", "*: pin/unpin  q/Esc: close  ?: hide  +/-: height" + rootsHelp) + changedIndicator,
+    theme.fg("dim", "C: expand changes  []: change  /:@ search  y: copy path  p: preview  u: parent"),
+    theme.fg("dim", ".: root  *: pin  q/Esc: close  ?: hide  +/-: height" + rootsHelp) + changedIndicator,
   ];
   if (!model.query.active && model.showFullHelp) lines.push(...fullHelp.map(line => truncateToWidth(line, width)));
   else lines.push(truncateToWidth(help, width));
