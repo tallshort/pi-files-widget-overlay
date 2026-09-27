@@ -158,20 +158,28 @@ describe("file browser expanded changed view", () => {
   });
 
   it("discards browser copy feedback after re-rooting", async () => {
-    const root = await createChangedRepository();
+    const parent = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-parent-"));
+    directories.push(parent);
+    const root = join(parent, "root");
+    await mkdir(root);
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
     let resolveCopy!: () => void;
     const pendingCopy = new Promise<void>(resolve => { resolveCopy = resolve; });
     vi.mocked(copyToClipboard).mockImplementationOnce(() => pendingCopy);
-    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
 
-    browser.render(40);
-    browser.handleInput("y");
-    browser.handleInput("u");
-    resolveCopy();
-    await Promise.resolve();
-    await Promise.resolve();
+    try {
+      browser.render(40);
+      browser.handleInput("y");
+      browser.handleInput("u");
+      expect(browser.getRootPath()).toBe(parent);
+      resolveCopy();
+      await Promise.resolve();
+      await Promise.resolve();
 
-    expect(browser.isPathCopied()).toBe(false);
+      expect(browser.isPathCopied()).toBe(false);
+    } finally {
+      browser.handleInput("q");
+    }
   });
 
   it("reports browser copy failures without preview", async () => {
