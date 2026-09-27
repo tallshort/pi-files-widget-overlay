@@ -1,7 +1,7 @@
 # Changelog
 
 All notable changes to this extension will be documented in this file.
-## [0.8.1] - Unreleased
+## [0.8.1] - 2026-09-27
 
 ### Changed
 - Add `r` as a left-hand alias for Markdown rendered/raw toggling.
