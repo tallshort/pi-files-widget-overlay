@@ -456,12 +456,20 @@ export function createFileBrowser(
   }
 
   function reportGitError(operation: string): void {
-    gitErrors.add(`${operation} unavailable`);
-    requestRender();
+    const message = `${operation} unavailable`;
+    if (!gitErrors.has(message)) {
+      gitErrors.add(message);
+      requestRender();
+    }
   }
 
   function clearGitError(operation: string): void {
-    gitErrors.delete(`${operation} unavailable`);
+    const message = `${operation} unavailable`;
+    if (gitErrors.delete(message)) requestRender();
+  }
+
+  function clearGitErrors(): void {
+    gitErrors.clear();
   }
 
   function focusFirstChild(directory: FileNode): boolean {
@@ -486,6 +494,7 @@ export function createFileBrowser(
       clearTimeout(noticeTimer);
       noticeTimer = null;
     }
+    clearGitErrors();
     clearContentSearch();
   }
 
@@ -560,7 +569,7 @@ export function createFileBrowser(
     gitAbort = new AbortController();
     rootPath = resolve(newRoot);
     browser.errorMessage = null;
-    gitErrors.clear();
+    clearGitErrors();
 
     repo = false;
     usesGitTree = false;
@@ -716,7 +725,6 @@ export function createFileBrowser(
   function openFile(node: FileNode): void {
     viewer.setFile(node);
   }
-
   function renderBrowser(width: number): string[] {
     return renderBrowserTree({
       stats: browser.stats,
@@ -944,7 +952,8 @@ export function createFileBrowser(
     const treeWidth = Math.floor((width - 1) * 0.3);
     const previewWidth = width - treeWidth - 1;
     const selected = getDisplayList()[browser.selectedIndex]?.node;
-    if (selected) {
+    const previewPending = browser.scanState.isScanning && (!selected || (selected.isDirectory && selected.loading));
+    if (selected && !previewPending) {
       if (previewPath !== selected.path) {
         clearPreviewCopyFeedback();
         previewViewer.setFile(selected);
@@ -962,7 +971,11 @@ export function createFileBrowser(
     const treeLines = renderBrowser(treeWidth);
     const treeContent = treeLines.slice(0, -footerLineCount);
     const fullWidthFooter = renderBrowser(width).slice(-footerLineCount);
-    const previewLines = selected ? previewViewer.render(previewWidth).slice(0, -2) : [theme.fg("dim", "Preview unavailable")];
+    const previewLines = previewPending
+      ? []
+      : selected
+        ? previewViewer.render(previewWidth).slice(0, -2)
+        : [theme.fg("dim", "Preview unavailable")];
     const lineCount = treeContent.length;
     const separator = theme.fg("borderMuted", "│");
     const splitLines = Array.from({ length: lineCount }, (_, index) => {

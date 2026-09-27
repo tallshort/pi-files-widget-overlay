@@ -1,5 +1,5 @@
 import { execFile as execFileCallback } from "node:child_process";
-import { mkdtemp, mkdir, readFile, rm, symlink, writeFile } from "node:fs/promises";
+import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { promisify } from "node:util";
@@ -487,6 +487,29 @@ describe("file browser expanded changed view", () => {
     await waitFor(() => browser.getBrowsePosition().rootPath === first);
   });
 
+  it("keeps preview blank while a non-Git root scan is pending", async () => {
+    const first = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-first-"));
+    const second = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-second-"));
+    directories.push(first, second);
+    const nested = join(second, "nested");
+    await mkdir(nested);
+    const browser = createFileBrowser(first, new Set(), theme, () => {}, () => {}, () => {}, first, undefined, undefined, [
+      { id: first, path: first, label: "First" },
+      { id: second, path: second, label: "Second" },
+    ], {
+      readDirectory: path => path === nested ? new Promise<never>(() => {}) : readdir(path, { withFileTypes: true }),
+    });
+    await waitForScanComplete(browser);
+
+    browser.handleInput("\t");
+    expect(browser.render(160).join("\n")).not.toContain("Preview unavailable");
+    await waitFor(() => browser.render(160).join("\n").includes("nested"));
+    browser.handleInput("j");
+    expect(browser.render(160).join("\n")).not.toContain("Directory selected");
+    browser.handleInput("q");
+  });
+
+
   it("keeps the active anchor after unpinning it", async () => {
     const first = await createChangedRepository();
     const second = await createChangedRepository();
@@ -640,7 +663,7 @@ describe("file browser expanded changed view", () => {
       expect(rendered).toContain("changed.ts");
       expect(rendered).toContain(" M");
       browser.handleInput("p");
-      expect(browser.render(200).join("\n")).toContain("tracked file list unavailable");
+      await waitFor(() => browser.render(200).join("\n").includes("tracked file list unavailable"));
       const now = Date.now();
       const clock = vi.spyOn(Date, "now").mockReturnValue(now + 3_001);
       browser.render(100);
