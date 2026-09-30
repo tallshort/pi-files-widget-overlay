@@ -263,10 +263,15 @@ describe("file browser expanded changed view", () => {
 
   it("keeps Git status visible when a narrow browser truncates names", async () => {
     const root = await createChangedRepository();
+    const changedFile = await addChangedRootFile(root);
     const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {});
-    await waitFor(() => browser.render(80).join("\n").includes("changed.ts"));
+    await waitForChangedFiles(browser, [changedFile]);
     browser.handleInput("C");
-    expect(browser.render(12).join("\n")).toContain(" M");
+    const narrowChangedLine = () => browser.render(12).find(line => line.includes("root-"));
+    await waitFor(() => narrowChangedLine()?.includes(" M") ?? false);
+    expect(narrowChangedLine()).toContain("…");
+    expect(visibleWidth(narrowChangedLine()!)).toBeLessThanOrEqual(12);
+    expect(narrowChangedLine()).toContain(" M");
   });
   it("uses stable labels for background activity", async () => {
     const root = await createChangedRepository();
