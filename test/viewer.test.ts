@@ -934,4 +934,80 @@ describe("file viewer word wrapping", () => {
     viewer.handleInput("r");
     expect(viewer.render(100)[0]).not.toContain("[RAW]");
   });
+  it("positions source lines in raw Markdown and clamps beyond the last line", async () => {
+    initTheme();
+    const content = `${Array.from({ length: 40 }, (_, index) => `line ${index + 1}`).join("\n")}`;
+    const filePath = await createSourceFile(content, "notes.md");
+    const preview = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), readOnly: true }, theme, () => {});
+    preview.setFile({ name: "notes.md", path: filePath, isDirectory: false }, 37);
+    const positioned = preview.render(40).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(positioned).toContain("37 │ line 37");
+    expect(positioned).not.toMatch(/\n\s*1 │ line 1(?:\n|$)/);
+    preview.setFile({ name: "notes.md", path: filePath, isDirectory: false }, 900);
+    const clamped = preview.render(40).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(clamped).toContain("40 │ line 40");
+  });
+  it("shows both endpoints of a requested source range when the viewport can fit them", async () => {
+    initTheme();
+    const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1}`).join("\n");
+    const filePath = await createSourceFile(content, "range.md");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "range.md", path: filePath, isDirectory: false }, 126, 140);
+    const visible = viewer.render(80).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(visible).toContain("126 │ line 126");
+    expect(visible).toContain("140 │ line 140");
+    expect(visible).not.toContain("125 │ line 125");
+    expect(visible).not.toContain("[RENDERED]");
+    viewer.setFile({ name: "range.md", path: filePath, isDirectory: false }, 126, 180);
+    const longRange = viewer.render(80).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(longRange).toContain("126 │ line 126");
+    expect(longRange).not.toContain("180 │ line 180");
+    viewer.setFile({ name: "range.md", path: filePath, isDirectory: false }, 900, 999);
+    expect(viewer.render(80).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")).toContain("200 │ line 200");
+  });
+  it("keeps a fitting source range visible after rewrapping at a narrower width", async () => {
+    initTheme();
+    const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${"x".repeat(84)}`).join("\n");
+    const filePath = await createSourceFile(content, "wrapped-range.md");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), wordWrapByPath: new Map([[filePath, true]]) }, theme, () => {});
+    viewer.setFile({ name: "wrapped-range.md", path: filePath, isDirectory: false }, 126, 130);
+    const withoutAnsi = (width: number) => viewer.render(width).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(withoutAnsi(120)).toContain("130 │ line 130");
+    const narrow = withoutAnsi(70);
+    expect(narrow).toContain("126 │ line 126");
+    expect(narrow).toContain("130 │ line 130");
+  });
+
+  it("releases range positioning when a search has no matches", async () => {
+    initTheme();
+    const content = Array.from({ length: 200 }, (_, index) => `line ${index + 1} ${"x".repeat(84)}`).join("\n");
+    const filePath = await createSourceFile(content, "searched-range.md");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir(), wordWrapByPath: new Map([[filePath, true]]) }, theme, () => {});
+    viewer.setFile({ name: "searched-range.md", path: filePath, isDirectory: false }, 126, 130);
+    viewer.render(120);
+    viewer.handleInput("/");
+    viewer.handleInput("Z");
+    viewer.handleInput("\r");
+    const narrow = viewer.render(70).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "");
+    expect(narrow).toContain("126 │ line 126");
+    expect(narrow).not.toContain("130 │ line 130");
+  });
+
+  it("uses source rather than diff line numbers for a changed file target", async () => {
+    const { root, filePath } = await createChangedFile();
+    const preview = createViewer({ getRoot: () => root, projectCwd: root, readOnly: true }, theme, () => {});
+    preview.setFile({ name: "changed.ts", path: filePath, isDirectory: false, gitStatus: "M" }, 1);
+    expect(preview.render(80)[0]).not.toContain("[DIFF]");
+    preview.setFile({ name: "changed.ts", path: filePath, isDirectory: false, gitStatus: "M" });
+    expect(preview.render(80)[0]).toContain("[DIFF]");
+  });
+  it("shows ignored files as normal content rather than an unavailable diff", async () => {
+    const filePath = await createSourceFile("ignored content\n", "ignored.txt");
+    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    viewer.setFile({ name: "ignored.txt", path: filePath, isDirectory: false, gitStatus: "!!" });
+    const lines = viewer.render(80).join("\n");
+    expect(lines).toContain("ignored content");
+    expect(lines).not.toContain("[DIFF]");
+    expect(viewer.handleInput("d")).toEqual({ type: "none" });
+  });
 });

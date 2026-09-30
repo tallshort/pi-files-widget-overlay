@@ -13,7 +13,7 @@ import {
 } from "./constants";
 import { loadFileContent, type RenderedLines } from "./file-viewer";
 import type { FileNode } from "./types";
-import { isImagePath, isMarkdownPath, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
+import { isIgnoredStatus, isImagePath, isMarkdownPath, isUntrackedStatus, sanitizeTerminalLabel } from "./utils";
 import { createViewerCommentEditor, type CommentScope } from "./viewer-comment-editor";
 import { classifyViewerInput, type ViewerInputCommand } from "./viewer-input";
 import { createViewerSearch } from "./viewer-search";
@@ -53,7 +53,7 @@ interface ViewerState {
 export interface ViewerController {
   isOpen(): boolean;
   getFile(): FileNode | null;
-  setFile(file: FileNode): void;
+  setFile(file: FileNode, sourceLine?: number, sourceEndLine?: number): void;
   updateFileRef(file: FileNode | null): void;
   close(): void;
   render(width: number): string[];
@@ -78,6 +78,8 @@ export function createViewer(
   const { getRoot, projectCwd, readOnly = false, requestRender, wordWrapByPath } = config;
   let pathCopiedUntil = 0;
   let copyErrorUntil = 0;
+  let pendingSourceLine: number | undefined;
+  let pendingSourceEndLine: number | undefined;
   let copyGeneration = 0;
   const search = createViewerSearch();
   const commentEditor = createViewerCommentEditor();
@@ -98,6 +100,9 @@ export function createViewer(
     wrappable: false,
   };
 
+  function canShowDiff(file: FileNode | null): boolean {
+    return !!file?.gitStatus && !isUntrackedStatus(file.gitStatus) && !isIgnoredStatus(file.gitStatus);
+  }
   function isMarkdownFile(): boolean {
     return !!state.file && isMarkdownPath(state.file.path);
   }
@@ -117,6 +122,7 @@ export function createViewer(
 
   function toggleMarkdownMode(): void {
     if (!isMarkdownFile() || state.diffMode) return;
+    viewport.clearRangeIntent();
     state.renderMarkdown = !state.renderMarkdown;
     state.wrappable = false;
     state.lastRenderWidth = 0;
@@ -135,6 +141,7 @@ export function createViewer(
 
   function setMode(mode: ViewerMode, preserveSearch = false): void {
     if (mode !== state.mode) {
+      if (mode === "search") viewport.clearRangeIntent();
       search.resetInput();
       commentEditor.reset();
     }
@@ -369,7 +376,7 @@ export function createViewer(
       helpLines = ["Preview — select a file in the browser"];
     } else {
       const markdownHelp = isMarkdownFile() && !state.diffMode ? "  m/r: raw/render" : "";
-      const diffHelp = state.file?.gitStatus && !isUntrackedStatus(state.file.gitStatus) ? "  d: diff" : "";
+      const diffHelp = canShowDiff(state.file) ? "  d: diff" : "";
       const wrapHelp = state.wrappable ? "  w: wrap" : "";
       helpLines = state.showFullHelp
         ? [
@@ -414,14 +421,16 @@ export function createViewer(
     copyPath,
     isPathCopied(): boolean { return Date.now() < pathCopiedUntil; },
 
-    setFile(file: FileNode): void {
+    setFile(file: FileNode, sourceLine?: number, sourceEndLine?: number): void {
       pathCopiedUntil = 0;
       copyErrorUntil = 0;
       copyGeneration += 1;
       state.file = file;
+      pendingSourceLine = sourceLine;
+      pendingSourceEndLine = sourceEndLine;
       viewport.reset();
-      state.diffMode = !!file.gitStatus && !isUntrackedStatus(file.gitStatus);
-      state.renderMarkdown = isMarkdownPath(file.path);
+      state.diffMode = sourceLine === undefined && canShowDiff(file);
+      state.renderMarkdown = sourceLine === undefined && isMarkdownPath(file.path);
       state.wordWrap = wordWrapByPath?.get(file.path) ?? false;
       state.wrappable = false;
       state.showFullHelp = false;
@@ -445,7 +454,7 @@ export function createViewer(
         state.wordWrap = storedWordWrap;
         state.lastRenderWidth = 0;
       }
-      if (state.diffMode && (!file?.gitStatus || isUntrackedStatus(file.gitStatus))) {
+      if (state.diffMode && !canShowDiff(file)) {
         state.diffMode = false;
         setMode("normal");
         viewport.setPosition(0, 0);
@@ -460,6 +469,8 @@ export function createViewer(
       copyErrorUntil = 0;
       copyGeneration += 1;
       state.file = null;
+      pendingSourceLine = undefined;
+      pendingSourceEndLine = undefined;
       state.renderedLines = { lines: [], rowGroups: [], logicalLines: [] };
       viewport.setLayout([], 0);
       viewport.reset();
@@ -479,7 +490,12 @@ export function createViewer(
       if (state.lastRenderWidth !== width || state.renderedLines.lines.length === 0 || (shouldAutoRefresh && hasFileChangedOnDisk())) {
         reloadContent(width);
       }
-
+      if (pendingSourceLine !== undefined) {
+        if (pendingSourceEndLine !== undefined) viewport.revealRangeStart(pendingSourceLine);
+        else viewport.navigate({ type: "line", lineNumber: pendingSourceLine }, false);
+        pendingSourceLine = undefined;
+        pendingSourceEndLine = undefined;
+      }
       const lines: string[] = [];
       lines.push(renderHeader(width));
       lines.push(theme.fg("borderMuted", "─".repeat(width)));
@@ -519,7 +535,7 @@ export function createViewer(
         readOnly,
         selectable: state.selectable,
         hasSearchMatches: searchState.matchCount > 0,
-        canDiff: !!state.file.gitStatus && !isUntrackedStatus(state.file.gitStatus),
+        canDiff: canShowDiff(state.file),
       });
       if (command.type === "count") {
         viewport.appendCount(command.digit);

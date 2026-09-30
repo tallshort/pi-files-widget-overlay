@@ -1,8 +1,9 @@
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import { MAX_TREE_DEPTH } from "./constants";
 import { getPathInfoSync, safeRealPathSync } from "./path-info";
 import type { DiffStats, FileNode, FlatNode } from "./types";
+import { isChangedFile } from "./utils";
 
 const collator = new Intl.Collator(undefined, { sensitivity: "base" });
 
@@ -48,7 +49,7 @@ export function updateTreeStats(root: FileNode | null): void {
       const totalAdditions = node.diffStats?.additions ?? 0;
       const totalDeletions = node.diffStats?.deletions ?? 0;
       const lineCountComplete = node.lineCount !== undefined;
-      const hasChanges = Boolean(node.gitStatus || node.agentModified);
+      const hasChanges = isChangedFile(node);
       return { totalLines, totalAdditions, totalDeletions, lineCountComplete, hasChanges };
     }
 
@@ -136,12 +137,12 @@ export function buildFileTreeFromPaths(
     }
   }
   for (const rawPath of filePaths) {
-    let normalized = rawPath.trim();
+    let normalized = rawPath;
     if (!normalized) continue;
     if (normalized.startsWith("./")) {
       normalized = normalized.slice(2);
     }
-    normalized = normalized.replace(/\\/g, "/");
+    if (sep === "\\") normalized = normalized.replace(/\\/g, "/");
 
     const parts = normalized.split("/").filter(Boolean);
     if (parts.length === 0) continue;

@@ -42,4 +42,45 @@ describe("viewer viewport", () => {
 
     expect(viewport.snapshot()).toEqual({ cursor: 5, scroll: 3, height: 3 });
   });
+
+  it("keeps range intent through reflow and height changes", () => {
+    const viewport = createViewerViewport(6);
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => index), 40);
+    viewport.revealRangeStart(10);
+    expect(viewport.snapshot()).toEqual({ cursor: 9, scroll: 9, height: 6 });
+
+    const anchor = viewport.captureAnchor();
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => [index, index]).flat(), 40);
+    viewport.restoreAnchor(anchor, false);
+    expect(viewport.snapshot()).toEqual({ cursor: 18, scroll: 18, height: 6 });
+    viewport.resize(4);
+    expect(viewport.snapshot()).toEqual({ cursor: 18, scroll: 18, height: 4 });
+  });
+
+  it.each(["navigate", "revealGroup", "setPosition", "beginSelection", "clearRangeIntent"] as const)("releases range intent on %s", action => {
+    const viewport = createViewerViewport(6);
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => index), 40);
+    viewport.revealRangeStart(10);
+    if (action === "navigate") viewport.navigate({ type: "move", direction: 1 }, false);
+    else if (action === "revealGroup") viewport.revealGroup(10, 1);
+    else if (action === "setPosition") viewport.setPosition(10, 9);
+    else if (action === "beginSelection") viewport.beginSelection();
+    else viewport.clearRangeIntent();
+
+    const anchor = viewport.captureAnchor();
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => [index, index]).flat(), 40);
+    viewport.restoreAnchor(anchor, action === "beginSelection");
+    expect(viewport.snapshot().scroll).toBeLessThan(viewport.snapshot().cursor);
+  });
+
+  it("does not carry a range into another file after reset", () => {
+    const viewport = createViewerViewport(6);
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => index), 40);
+    viewport.revealRangeStart(10);
+    viewport.reset();
+    viewport.setLayout(Array.from({ length: 40 }, (_, index) => [index, index]).flat(), 40);
+    viewport.restoreAnchor({ cursorGroup: 0, selectStartGroup: 0, selectEndGroup: 0 }, false);
+    expect(viewport.snapshot()).toEqual({ cursor: 0, scroll: 0, height: 6 });
+  });
+
 });

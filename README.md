@@ -42,7 +42,8 @@ The extension has no `bat`, `glow`, or `delta` runtime dependency. It uses Pi's 
 | Command | Description |
 | --- | --- |
 | `/readfiles` | Open the browser at the current directory. |
-| `/readfiles <path...>` | Open the browser with one or more absolute, relative, or `~`-prefixed roots. Quote paths containing spaces. |
+| `/readfiles <path...>` | Open the browser with one or more absolute, relative, or `~`-prefixed directories. Quote paths containing spaces. |
+| `/readfiles <file-path>[:line]` or `/readfiles <file-path>:<start>-<end>` | Open one file directly in the viewer at a line, or show both range endpoints when they fit; `q` returns to its parent browser with the file selected. Only one file is accepted. |
 
 For development:
 
@@ -131,6 +132,7 @@ The first path must be accessible and is the initial root. Press `Tab` or `Shift
 - Wide terminals use a read-only 3:7 tree/preview split. The preview follows the selected item; `g` / `G`, `<count>G`, `PgUp` / `PgDn`, `Ctrl-U` / `Ctrl-D`, and `w` control it without enabling edits.
 - Hidden project files such as `.pi/` and `.github/` remain visible. `.git/` and common dependency/build caches remain hidden.
 - Directory symlinks show `↗` and can be expanded. Untracked files show `[UNTRACKED]` and open in normal view.
+- A single file argument opens the file viewer immediately and keeps that file selected in its parent directory for when you return with `q`, even when Git ignores it or its name is normally hidden by the browser. This exception exposes only the requested file, not other ignored files; Git-ignored files use normal content rather than diff mode and do not count as changed. For example, `/readfiles src/index.ts:126-140` positions line 126 near the top so lines 126 and 140 are both visible when the viewport can fit them; for longer ranges it shows as much as possible starting at 126. The range is not selected or highlighted. This works on narrow terminals too; out-of-range lines clamp to the last line. A requested source line uses raw Markdown and normal (non-diff) file content so line numbers stay source-aligned. After returning to the browser, Pin and other directory actions remain available; re-rooting clears a pending line jump.
 - Searching or selecting rendered Markdown switches it to raw source so matches, line numbers, and comments stay aligned. On terminal-width changes, rendered Markdown keeps the current paragraph when it can identify it; otherwise it returns to the top.
 - Comments for files outside the current project use absolute paths; comments for project files use project-relative paths.
 - Image, binary, and terminal-control-character files show a safe metadata placeholder instead of rendering their bytes. File names, paths, and error messages are sanitized before terminal rendering.

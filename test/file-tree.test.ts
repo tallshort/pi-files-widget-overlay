@@ -1,14 +1,15 @@
-import { join } from "node:path";
+import { join, sep } from "node:path";
 
 import { describe, expect, it } from "vitest";
 
 import { buildFileTreeFromPaths } from "../src/file-tree.ts";
 
 describe("file-tree path normalization", () => {
-  it("normalizes dot-prefixed Windows-style paths and preserves Git metadata", () => {
+  it("handles dot-prefixed Git paths and platform-specific backslashes", () => {
     const rootPath = join("project", "root");
-    const gitStatus = new Map([["src/nested/changed.ts", "M"]]);
-    const diffStats = new Map([["src/nested/changed.ts", { additions: 2, deletions: 1 }]]);
+    const gitPath = sep === "\\" ? "src/nested/changed.ts" : "src\\nested\\changed.ts";
+    const gitStatus = new Map([[gitPath, "M"]]);
+    const diffStats = new Map([[gitPath, { additions: 2, deletions: 1 }]]);
     const root = buildFileTreeFromPaths(
       rootPath,
       ["./src\\nested\\changed.ts"],
@@ -18,18 +19,16 @@ describe("file-tree path normalization", () => {
       new Set()
     );
 
-    const src = root.children?.[0];
-    const nested = src?.children?.[0];
-    const changed = nested?.children?.[0];
+    const changed = sep === "\\" ? root.children?.[0]?.children?.[0]?.children?.[0] : root.children?.[0];
     expect(changed).toMatchObject({
-      name: "changed.ts",
-      path: join(rootPath, "src", "nested", "changed.ts"),
+      name: sep === "\\" ? "changed.ts" : "src\\nested\\changed.ts",
+      path: sep === "\\" ? join(rootPath, "src", "nested", "changed.ts") : join(rootPath, "src\\nested\\changed.ts"),
       gitStatus: "M",
       diffStats: { additions: 2, deletions: 1 },
     });
   });
 
-  it("deduplicates equivalent slash styles into one file node", () => {
+  it("deduplicates slash styles only when backslash is a separator", () => {
     const root = buildFileTreeFromPaths(
       "project",
       ["src/file.ts", "./src\\file.ts"],
@@ -39,7 +38,14 @@ describe("file-tree path normalization", () => {
       new Set()
     );
 
-    expect(root.children?.[0]?.children).toHaveLength(1);
+    expect(root.children).toHaveLength(sep === "\\" ? 1 : 2);
+    if (sep === "\\") expect(root.children?.[0]?.children).toHaveLength(1);
+  });
+
+  it("preserves trailing spaces and literal backslashes in POSIX Git filenames", () => {
+    const root = buildFileTreeFromPaths("project", ["name ", "slash\\name"], new Map(), new Map(), new Set(), new Set());
+    expect(root.children?.some(node => node.name === "name ")).toBe(true);
+    if (sep === "/") expect(root.children?.some(node => node.name === "slash\\name")).toBe(true);
   });
 
   it("preserves a relative root when realpath resolution fails", () => {

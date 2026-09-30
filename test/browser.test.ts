@@ -1,11 +1,11 @@
 import { execFile as execFileCallback } from "node:child_process";
 import { mkdtemp, mkdir, readFile, readdir, rm, symlink, writeFile } from "node:fs/promises";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { promisify } from "node:util";
 
 import { CURSOR_MARKER, visibleWidth } from "@earendil-works/pi-tui";
-import { copyToClipboard, getAgentDir, type Theme } from "@earendil-works/pi-coding-agent";
+import { copyToClipboard, getAgentDir, type ExtensionAPI, type ExtensionCommandContext, type Theme } from "@earendil-works/pi-coding-agent";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
@@ -15,7 +15,7 @@ vi.mock("@earendil-works/pi-coding-agent", async importOriginal => ({
 import { createFileBrowser } from "../src/browser.ts";
 import { createOverlayActivityPresenter } from "../src/overlay-activity.ts";
 import { getGitBranchAsync, getGitDiffStats, getGitDiffStatsAsync, getGitFileList, getGitFileListAsync, getGitStatus, getGitStatusAsync } from "../src/git.ts";
-import { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, hasMultipleDistinctCommandRoots, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
+import editorExtension, { createRootAnchors, getCommandRootKey, getOverlayPathWidths, getRestoreBrowsePositionSettingsPath, hasMultipleDistinctCommandRoots, parseReadfilesPaths, readPinnedRoots, readRestoreBrowsePositionSetting, resolveReadfilesTarget, resolveRestoredPosition, sanitizeRestorePathLabel, shouldCaptureBrowsePosition, shouldRestoreBrowsePosition, writePinnedRoots } from "../src/index.ts";
 
 const execFile = promisify(execFileCallback);
 const theme = {
@@ -287,6 +287,8 @@ describe("file browser expanded changed view", () => {
     const browser = createFileBrowser(root, new Set([join(root, "unchanged.ts")]), theme, () => {}, () => {}, () => {});
     await waitForScanComplete(browser);
     expect(browser.render(100).join("\n")).toContain("🤖");
+    browser.handleInput("c");
+    expect(browser.render(100).join("\n")).toContain("unchanged.ts");
   });
 
   it("exposes the root path for the overlay title", async () => {
@@ -355,6 +357,128 @@ describe("file browser expanded changed view", () => {
       directoryPath: root,
       selectedFilePath: selectedFile,
     });
+  });
+  it("opens a command file directly in the viewer at its source line, then returns to its selected parent browser", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-file-target-"));
+    directories.push(root);
+    const file = join(root, "target.ts");
+    await writeFile(file, `${Array.from({ length: 45 }, (_, index) => `const line${index + 1} = ${index + 1};`).join("\n")}\n`);
+    const pin = vi.fn(async () => ({ anchors: [{ id: root, path: root, label: "root", pinned: true }], message: "Pinned" }));
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file, initialSourceLine: 37, initialSourceEndLine: 40, togglePinnedRoot: pin });
+    expect(browser.render(120).join("\n")).toContain("const line37 = 37;");
+    expect(browser.render(120).join("\n")).toContain("const line40 = 40;");
+    expect(browser.render(120).join("\n")).not.toContain("const line1 = 1;");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+    browser.handleInput("q");
+    expect(browser.getBrowsePosition()).toEqual({ rootPath: root, directoryPath: root, selectedFilePath: file });
+    expect(browser.render(120).join("\n")).toContain("target.ts");
+    expect(browser.render(120).join("\n")).toContain("const line37 = 37;");
+    expect(browser.render(120).join("\n")).toContain("const line40 = 40;");
+    browser.handleInput("*");
+    await waitFor(() => pin.mock.calls.length === 1);
+    expect(pin).toHaveBeenCalledWith(root);
+  });
+  it("opens a command file without a line immediately and keeps its browser selection", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-file-target-"));
+    directories.push(root);
+    const file = join(root, "plain.txt");
+    await writeFile(file, "plain body\n");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file });
+    expect(browser.render(50).join("\n")).toContain("plain.txt 2L");
+    browser.handleInput("q");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+  });
+  it("opens a narrow command file directly and clamps an out-of-range source line", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-file-target-"));
+    directories.push(root);
+    const file = join(root, "target.ts");
+    await writeFile(file, "first\nlast\n");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file, initialSourceLine: resolveReadfilesTarget(`${file}:900-999`, root).line });
+    expect(browser.render(50).join("\n")).toContain("last");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+    browser.handleInput("q");
+    expect(browser.getBrowsePosition().selectedFilePath).toBe(file);
+  });
+  it("keeps the command viewer open as Git metadata replaces the provisional file node", async () => {
+    const root = await createChangedRepository();
+    const parent = join(root, "src", "nested");
+    const file = join(parent, "changed.ts");
+    const browser = createFileBrowser(parent, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: parent, path: parent, label: "nested" }], { commandFilePath: file });
+    expect(browser.render(120).join("\n")).toContain("changed.ts");
+    await waitFor(() => browser.render(120).join("\n").includes("d: diff"));
+    browser.handleInput("q");
+    expect(browser.getBrowsePosition().selectedFilePath).toBe(file);
+  });
+  it("keeps a command-selected Git-ignored file after the Git tree replaces the scan", async () => {
+    const root = await createChangedRepository();
+    const file = join(root, "ignored.ts");
+    await writeFile(join(root, ".gitignore"), "ignored.ts\n");
+    await writeFile(file, `${Array.from({ length: 45 }, (_, index) => `line ${index + 1}`).join("\n")}\n`);
+    const browser = createFileBrowser(root, new Set([file]), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file, initialSourceLine: 37 });
+    expect(browser.render(50).join("\n")).toContain("line 37");
+    browser.handleInput("q");
+    await waitForScanComplete(browser);
+    const { stdout: branch } = await execFile("git", ["branch", "--show-current"], { cwd: root });
+    await waitFor(() => browser.render(50).join("\n").includes(`(${branch.trim()})`));
+    expect(browser.getBrowsePosition().selectedFilePath).toBe(file);
+    expect(browser.render(120).join("\n")).toContain("line 37");
+    browser.handleInput("c");
+    expect(browser.render(50).join("\n")).not.toContain("ignored.ts");
+  });
+  it.skipIf(sep !== "/")("keeps command-selected Git filenames with trailing spaces or backslashes intact", async () => {
+    const root = await createChangedRepository();
+    await writeFile(join(root, ".gitignore"), "name\\ \n");
+    const { stdout: branch } = await execFile("git", ["branch", "--show-current"], { cwd: root });
+    for (const name of ["name ", "slash\\name", "untracked "]) {
+      const file = join(root, name);
+      await writeFile(file, "target body\n");
+      const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+        [{ id: root, path: root, label: "root" }], { commandFilePath: file });
+      browser.handleInput("q");
+      await waitFor(() => browser.render(50).join("\n").includes(`(${branch.trim()})`));
+      expect(browser.getBrowsePosition().selectedFilePath).toBe(file);
+      expect(browser.render(120).join("\n")).not.toContain("[DIFF]");
+      if (name === "untracked ") {
+        expect(browser.render(50).filter(line => line.includes("untracked"))).toHaveLength(1);
+      }
+    }
+  });
+  it("allows an explicitly requested hidden file without revealing other hidden files", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-hidden-target-"));
+    directories.push(root);
+    const file = join(root, ".env");
+    await writeFile(file, "SECRET=example\n");
+    await writeFile(join(root, "other.ts"), "other\n");
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file });
+    browser.handleInput("q");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+    expect(browser.render(100).join("\n")).toContain(".env");
+  });
+  it("does not reuse a command file line after returning to the browser and re-rooting", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-reroot-target-"));
+    directories.push(root);
+    const file = join(root, "target.ts");
+    await writeFile(file, `${Array.from({ length: 45 }, (_, index) => `line ${index + 1}`).join("\n")}\n`);
+    const browser = createFileBrowser(root, new Set(), theme, () => {}, () => {}, () => {}, root, file, undefined,
+      [{ id: root, path: root, label: "root" }], { commandFilePath: file, initialSourceLine: 37 });
+    expect(browser.render(50).join("\n")).toContain("line 37");
+    browser.handleInput("q");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+    browser.handleInput("u");
+    await waitFor(() => browser.getBrowsePosition().rootPath !== root);
+    browser.handleInput(".");
+    await waitFor(() => browser.getBrowsePosition().selectedFilePath === file);
+    expect(browser.render(120).join("\n")).toContain("line 1");
+    expect(browser.render(120).join("\n")).not.toContain("line 37");
+    browser.handleInput("\r");
+    expect(browser.render(120).join("\n")).toContain("line 1");
+    expect(browser.render(120).join("\n")).not.toContain("line 37");
   });
   it("preserves a provisional selection, expansions, and open viewer when Git publishes its tree", async () => {
     vi.resetModules();
@@ -446,6 +570,77 @@ describe("file browser expanded changed view", () => {
       { id: root, path: root, label: root.split("/").at(-1) },
       { id: sibling, path: sibling, label: sibling.split("/").at(-1), pinned: true },
     ]);
+  });
+
+  it("resolves one file and an optional source line without confusing directory roots", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-target-"));
+    directories.push(root);
+    await mkdir(join(root, "nested directory"));
+    const file = join(root, "nested directory", "example.ts");
+    const literalColon = join(root, "literal:12");
+    const literalRange = join(root, "literal:2-3");
+    await writeFile(file, "one\ntwo\nthree\n");
+    await writeFile(literalColon, "literal\n");
+    await writeFile(literalRange, "literal range\n");
+    expect(resolveReadfilesTarget("nested directory/example.ts", root)).toEqual({ path: join(root, "nested directory"), selectedFilePath: file });
+    expect(resolveReadfilesTarget("nested directory/example.ts:3", root)).toEqual({ path: join(root, "nested directory"), selectedFilePath: file, line: 3 });
+    expect(resolveReadfilesTarget("nested directory/example.ts:2-3", root)).toEqual({ path: join(root, "nested directory"), selectedFilePath: file, line: 2, endLine: 3 });
+    expect(resolveReadfilesTarget(`${file}:2-999`, root)).toEqual({ path: join(root, "nested directory"), selectedFilePath: file, line: 2, endLine: 999 });
+    expect(resolveReadfilesTarget(`${file}:999`, root)).toEqual({ path: join(root, "nested directory"), selectedFilePath: file, line: 999 });
+    expect(resolveReadfilesTarget("literal:12", root)).toEqual({ path: root, selectedFilePath: literalColon });
+    expect(resolveReadfilesTarget("literal:2-3", root)).toEqual({ path: root, selectedFilePath: literalRange });
+    expect(resolveReadfilesTarget("nested directory", root)).toEqual({ path: join(root, "nested directory") });
+    expect(parseReadfilesPaths('"nested directory/example.ts:2"')).toEqual(["nested directory/example.ts:2"]);
+    expect(resolveReadfilesTarget("nested directory/example.ts:0", root).error).toContain("Invalid line number");
+    expect(resolveReadfilesTarget("nested directory/example.ts:0-3", root).error).toContain("Invalid line number");
+    expect(resolveReadfilesTarget("nested directory/example.ts:3-2", root).error).toContain("Invalid line range");
+    expect(resolveReadfilesTarget("missing.ts", root).error).toContain("not an accessible file or directory");
+    expect(resolveReadfilesTarget("missing.ts:2-3", root).error).toContain("not an accessible file or directory");
+    const child = join(root, "nested directory");
+    expect(resolveReadfilesTarget(`${child}/../nested directory/example.ts:3`, root)).toEqual({ path: child, selectedFilePath: file, line: 3 });
+    expect(resolveReadfilesTarget(`${child}/../nested directory/example.ts:2-3`, root)).toEqual({ path: child, selectedFilePath: file, line: 2, endLine: 3 });
+  });
+
+  it("routes a single quoted file command directly to its viewer and rejects multiple file arguments", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-command-"));
+    directories.push(root);
+    await mkdir(join(root, "nested"));
+    const file = join(root, "file with spaces.ts");
+    await writeFile(file, `${Array.from({ length: 45 }, (_, index) => `line ${index + 1}`).join("\n")}\n`);
+    let handler: ((args: string, ctx: ExtensionCommandContext) => Promise<void>) | undefined;
+    editorExtension({ registerCommand: (name: string, command: { handler: typeof handler }) => {
+      expect(name).toBe("readfiles");
+      handler = command.handler;
+    }, on: () => {} } as unknown as ExtensionAPI);
+    const notices: string[] = [];
+    const custom = vi.fn(async (factory: (tui: { requestRender: () => void }, theme: Theme, kb: unknown, done: () => void) => { render: (width: number) => string[]; handleInput: (key: string) => void }) => {
+      let done!: () => void;
+      let closes = 0;
+      const finished = new Promise<void>(resolve => { done = () => { closes += 1; resolve(); }; });
+      const component = factory({ requestRender: () => {} }, theme, {}, done);
+      await waitFor(() => component.render(120).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "").includes("line 37"));
+      expect(component.render(120).join("\n")).toContain("file with spaces.ts");
+      if (custom.mock.calls.length === 2) {
+        expect(component.render(120).join("\n").replace(/\x1b\[[0-?]*[ -/]*[@-~]/g, "")).toContain("line 40");
+      }
+      component.handleInput("q");
+      expect(closes).toBe(0);
+      await waitFor(() => component.render(120).join("\n").includes("file with spaces.ts"));
+      component.handleInput("q");
+      expect(closes).toBe(1);
+      await finished;
+    });
+    const ctx = { cwd: root, isIdle: () => true, ui: { notify: (message: string) => notices.push(message), custom } } as unknown as ExtensionCommandContext;
+    await handler?.('"file with spaces.ts:37"', ctx);
+    expect(custom).toHaveBeenCalledTimes(1);
+    await handler?.(`"${root}/nested/../file with spaces.ts:37-40"`, ctx);
+    expect(custom).toHaveBeenCalledTimes(2);
+    await handler?.('"file with spaces.ts" "file with spaces.ts"', ctx);
+    expect(notices).toContain("Multiple paths must all be directories; open a file by itself");
+    expect(custom).toHaveBeenCalledTimes(2);
+    await handler?.("missing.ts", ctx);
+    expect(notices.some(message => message.includes("missing.ts") && message.includes("not an accessible file or directory"))).toBe(true);
+    expect(custom).toHaveBeenCalledTimes(2);
   });
 
   it("reads and writes pinned roots without discarding settings", async () => {

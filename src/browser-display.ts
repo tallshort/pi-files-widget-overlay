@@ -2,6 +2,7 @@ import { dirname } from "node:path";
 
 import type { FileNode, FlatNode } from "./types";
 import type { BrowserQuerySnapshot } from "./browser-query";
+import { isChangedFile } from "./utils";
 
 export interface BrowserDisplayState {
   flatList: FlatNode[];
@@ -23,7 +24,7 @@ export interface ChangedNavigationTarget {
 
 function collectChangedFiles(node: FileNode, ancestors: FileNode[] = []): ChangedNavigationTarget[] {
   const results: ChangedNavigationTarget[] = [];
-  if (!node.isDirectory && (node.gitStatus || node.agentModified)) results.push({ file: node, ancestors: [...ancestors] });
+  if (!node.isDirectory && isChangedFile(node)) results.push({ file: node, ancestors: [...ancestors] });
   for (const child of node.children ?? []) results.push(...collectChangedFiles(child, [...ancestors, node]));
   return results;
 }
@@ -52,7 +53,7 @@ export function deriveChangedNavigationTarget(
 export function deriveBrowserDisplayList(state: BrowserDisplayState, query: BrowserQuerySnapshot): FlatNode[] {
   let list = query.query ? state.fullList : state.flatList;
   if (state.showOnlyChanged) {
-    list = list.filter(item => item.node.gitStatus || item.node.agentModified || (item.node.isDirectory && item.node.hasChangedChildren));
+    list = list.filter(item => isChangedFile(item.node) || (item.node.isDirectory && item.node.hasChangedChildren));
   }
   if (!query.query) return list;
   if (query.kind === "content") {

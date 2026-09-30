@@ -9,7 +9,7 @@ import { getAgentDir, isEditToolResult, isWriteToolResult, type ExtensionAPI } f
 import { truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { readFileSync, statSync, writeFileSync } from "node:fs";
 import { homedir } from "node:os";
-import { basename, dirname, isAbsolute, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import { OVERLAY_MAX_HEIGHT, POLL_INTERVAL_MS } from "./constants";
 import { formatCommentMessage } from "./comment";
@@ -112,22 +112,46 @@ function resolveCommandPath(arg: string, cwd: string): string {
   let candidate = arg;
   if (candidate === "~") candidate = homedir();
   else if (candidate.startsWith("~/")) candidate = join(homedir(), candidate.slice(2));
-  return isAbsolute(candidate) ? candidate : resolve(cwd, candidate);
+  return resolve(cwd, candidate);
+}
+
+export interface ReadfilesTarget {
+  path: string;
+  selectedFilePath?: string;
+  line?: number;
+  endLine?: number;
+  error?: string;
+}
+
+/** A literal existing path wins over a trailing :line or :start-end suffix (filenames may contain colons). */
+export function resolveReadfilesTarget(arg: string | undefined, cwd: string): ReadfilesTarget {
+  if (!arg) return { path: cwd };
+  const absolute = resolveCommandPath(arg, cwd);
+  const lineMatch = arg.match(/^(.*):(\d+)(?:-(\d+))?$/);
+  let candidate = absolute;
+  let line: number | undefined;
+  let endLine: number | undefined;
+  let info: ReturnType<typeof statSync> | undefined;
+  try { info = statSync(candidate); } catch { /* A missing literal path may carry a line suffix. */ }
+  if (!info && lineMatch) {
+    candidate = resolveCommandPath(lineMatch[1], cwd);
+    line = Number(lineMatch[2]);
+    if (!Number.isSafeInteger(line) || line < 1) return { path: cwd, error: `Invalid line number: ${lineMatch[2]}` };
+    if (lineMatch[3] !== undefined) {
+      endLine = Number(lineMatch[3]);
+      if (!Number.isSafeInteger(endLine) || endLine < line) return { path: cwd, error: `Invalid line range: ${lineMatch[2]}-${lineMatch[3]}` };
+    }
+    try { info = statSync(candidate); } catch { /* Report the requested path below. */ }
+  }
+  if (info?.isFile()) return { path: dirname(candidate), selectedFilePath: candidate, ...(line ? { line } : {}), ...(endLine ? { endLine } : {}) };
+  if (info?.isDirectory() && line === undefined) return { path: candidate };
+  return { path: cwd, error: `${absolute} is not an accessible file or directory` };
 }
 
 function resolveInitialPath(arg: string | undefined, cwd: string): { path: string; error?: string } {
-  if (!arg) return { path: cwd };
-  let candidate = arg;
-  if (!candidate) return { path: cwd };
-  const absolute = resolveCommandPath(candidate, cwd);
-  try {
-    if (!statSync(absolute).isDirectory()) {
-      return { path: cwd, error: `${absolute} is not a directory` };
-    }
-  } catch {
-    return { path: cwd, error: `${absolute} is not accessible` };
-  }
-  return { path: absolute };
+  const target = resolveReadfilesTarget(arg, cwd);
+  if (target.selectedFilePath) return { path: cwd, error: `${arg} is not a directory` };
+  return { path: target.path, error: target.error };
 }
 export interface BrowsePosition {
   rootPath: string;
@@ -186,17 +210,25 @@ export default function editorExtension(pi: ExtensionAPI): void {
   const restoreBrowsePosition = readRestoreBrowsePositionSetting();
   const browsePositions = new Map<string, BrowsePosition>();
   pi.registerCommand("readfiles", {
-    description: "Open file browser as a floating overlay (optional: /readfiles <path...> for one or more roots)",
+    description: "Open file browser at a directory or one selected file (optional :line or :start-end), with multiple directory roots supported",
     handler: async (args, ctx) => {
       const cwd = ctx.cwd;
       const requestedPaths = parseReadfilesPaths(args);
-      const commandRoots = requestedPaths.map(path => resolveCommandPath(path, cwd));
+      if (requestedPaths.length > 1 && requestedPaths.some(path => resolveReadfilesTarget(path, cwd).selectedFilePath)) {
+        ctx.ui.notify("Multiple paths must all be directories; open a file by itself", "error");
+        return;
+      }
+      const primary: ReadfilesTarget = requestedPaths.length === 1
+        ? resolveReadfilesTarget(requestedPaths[0], cwd)
+        : resolveInitialPath(requestedPaths[0], cwd);
+      const commandRoots = requestedPaths.length === 1 && primary.selectedFilePath
+        ? [primary.path]
+        : requestedPaths.map(path => resolveCommandPath(path, cwd));
       const pinnedRoots = readPinnedRoots(cwd);
       const accessiblePinnedRoots = pinnedRoots.filter(isAccessibleDirectory);
       if (pinnedRoots.length > accessiblePinnedRoots.length) ctx.ui.notify("Some pinned roots are unavailable", "warning");
       const commandPaths = commandRoots.length > 0 ? [...commandRoots, ...accessiblePinnedRoots] : [cwd, ...accessiblePinnedRoots];
       const hasExplicitPath = requestedPaths.length > 0;
-      const primary = resolveInitialPath(commandPaths[0], cwd);
       if (primary.error) {
         ctx.ui.notify(sanitizeTerminalLabel(primary.error), "error");
         return;
@@ -212,7 +244,7 @@ export default function editorExtension(pi: ExtensionAPI): void {
         : undefined;
       const initialRootPath = restored?.rootPath ?? resolved.path;
       const initialDirectoryPath = restored?.restored ? restored.directoryPath : undefined;
-      const initialSelectedPath = restored?.restored ? restored.selectedFilePath : undefined;
+      const initialSelectedPath = primary.selectedFilePath ?? (restored?.restored ? restored.selectedFilePath : undefined);
       const { createFileBrowser } = await import("./browser");
 
       await ctx.ui.custom<void>((tui, theme, _kb, done) => {
@@ -255,6 +287,9 @@ export default function editorExtension(pi: ExtensionAPI): void {
           initialDirectoryPath,
           rootAnchors,
           {
+            commandFilePath: primary.selectedFilePath,
+            initialSourceLine: primary.line,
+            initialSourceEndLine: primary.endLine,
             togglePinnedRoot: async path => {
               const pins = readPinnedRoots(cwd);
               const pinned = pins.includes(path);

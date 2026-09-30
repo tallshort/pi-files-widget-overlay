@@ -1,6 +1,8 @@
 import { accessSync, constants, statSync } from "node:fs";
 import { extname, join } from "node:path";
 
+import type { FileNode } from "./types";
+
 const TERMINAL_CONTROL_CHARACTERS = /[\u0000-\u001f\u007f-\u009f]/g;
 
 /** Replace bytes that could alter terminal output while retaining a recognizable label. */
@@ -60,6 +62,15 @@ export function isUntrackedStatus(status?: string): boolean {
 
 export function isIgnoredStatus(status?: string): boolean {
   return status === "!" || status === "!!";
+}
+
+export function isChangedStatus(status?: string): boolean {
+  return !!status && !isIgnoredStatus(status);
+}
+
+/** An ignored file remains outside changed-only views even when observed by the agent. */
+export function isChangedFile(node: Pick<FileNode, "gitStatus" | "agentModified">): boolean {
+  return !isIgnoredStatus(node.gitStatus) && (isChangedStatus(node.gitStatus) || Boolean(node.agentModified));
 }
 
 export function isMarkdownPath(path: string): boolean {

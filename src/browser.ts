@@ -1,9 +1,9 @@
 import { copyToClipboard, createGrepTool, type Theme } from "@earendil-works/pi-coding-agent";
 import { truncateToWidth } from "@earendil-works/pi-tui";
-import type { Dirent } from "node:fs";
+import { statSync, type Dirent } from "node:fs";
 import { readdir } from "node:fs/promises";
 import { homedir } from "node:os";
-import { dirname, join, relative, resolve, sep } from "node:path";
+import { basename, dirname, join, relative, resolve, sep } from "node:path";
 
 import {
   DEFAULT_BROWSER_HEIGHT,
@@ -112,7 +112,7 @@ export function createFileBrowser(
   initialSelectedPath?: string,
   initialDirectoryPath?: string,
   rootAnchors: RootAnchor[] = [{ id: resolve(initialPath), path: resolve(initialPath), label: "." }],
-  options: { readDirectory?: (path: string) => Promise<Dirent[]>; togglePinnedRoot?: (path: string) => Promise<{ anchors: RootAnchor[]; message: string }> } = {}
+  options: { commandFilePath?: string; initialSourceLine?: number; initialSourceEndLine?: number; readDirectory?: (path: string) => Promise<Dirent[]>; togglePinnedRoot?: (path: string) => Promise<{ anchors: RootAnchor[]; message: string }> } = {}
 ): BrowserController {
   const ignored = getIgnoredNames();
   const readDirectory = options.readDirectory ?? (path => readdir(path, { withFileTypes: true }));
@@ -131,6 +131,9 @@ export function createFileBrowser(
   const wordWrapByPath = new Map<string, boolean>();
   const viewer = createViewer({ getRoot: () => rootPath, projectCwd, requestRender, wordWrapByPath }, theme, requestComment);
   const previewViewer = createViewer({ getRoot: () => rootPath, projectCwd, readOnly: true, requestRender, wordWrapByPath }, theme, requestComment);
+  const initialSourceRange = options.initialSourceLine === undefined ? undefined : { start: options.initialSourceLine, end: options.initialSourceEndLine };
+  let previewInitialLinePending = initialSourceRange;
+  let viewerInitialLinePending = initialSourceRange;
   let previewPath: string | null = null;
   let lastRenderWidth = 0;
   let previewEnabled = true;
@@ -196,12 +199,18 @@ export function createFileBrowser(
     state: browser,
     agentModifiedFiles,
     ignored,
+    explicitFilePath: options.commandFilePath,
     readDirectory,
     onError: reportError,
     onEvent(event) {
       refreshLists();
       if (event === "tree") {
         restoreInitialPosition();
+        const viewingFile = viewer.getFile();
+        if (viewingFile) {
+          const node = browser.nodeByPath.get(viewingFile.path);
+          if (node) viewer.updateFileRef(node);
+        }
         scanPendingRestorePath();
         if (browser.focusFirstChildOf) {
           const directory = browser.nodeByPath.get(browser.focusFirstChildOf);
@@ -398,6 +407,30 @@ export function createFileBrowser(
     }
   }
 
+  function buildGitTree(paths: string[]): FileNode {
+    const target = options.commandFilePath;
+    let explicitFile: string | undefined;
+    if (target && dirname(target) === rootPath) {
+      try { if (statSync(target).isFile()) explicitFile = target; } catch { /* The command file was removed. */ }
+    }
+    // Git listings omit ignored files. Attach the requested file from its verified
+    // filesystem path so browser ignore rules cannot hide it.
+    const listedPaths = explicitFile ? paths.filter(path => resolve(rootPath, path) !== explicitFile) : paths;
+    const root = buildFileTreeFromPaths(rootPath, listedPaths, gitStatus, diffStats, ignored, agentModifiedFiles);
+    if (explicitFile && !root.children?.some(child => child.path === explicitFile)) {
+      const gitPath = normalizeGitPath(relative(rootPath, explicitFile));
+      root.children?.push({
+        name: basename(explicitFile), path: explicitFile, isDirectory: false,
+        isSymlink: getPathInfoSync(explicitFile).isSymlink, parent: root,
+        agentModified: agentModifiedFiles.has(explicitFile),
+        gitStatus: gitStatus.get(gitPath), diffStats: diffStats.get(gitPath),
+      });
+      sortChildren(root);
+      updateTreeStats(root);
+    }
+    return root;
+  }
+
   function replaceTree(root: FileNode): void {
     const selectedPath = getDisplayList()[browser.selectedIndex]?.node.path;
     const expandedPaths = new Set(
@@ -536,7 +569,7 @@ export function createFileBrowser(
         // listing, which supplies untracked paths.
         if (fileListResult && !statusResult.failed && !fileListResult.failed) {
           usesGitTree = true;
-          replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
+          replaceTree(buildGitTree(fileListResult.files));
         }
         rootSession.applyGitMetadata(gitStatus, diffStats);
         refreshLists();
@@ -616,7 +649,7 @@ export function createFileBrowser(
       // A later metadata refresh retries the listing before publishing a Git tree.
       if (!statusResult.failed && !fileListResult.failed) {
         usesGitTree = true;
-        replaceTree(buildFileTreeFromPaths(rootPath, fileListResult.files, gitStatus, diffStats, ignored, agentModifiedFiles));
+        replaceTree(buildGitTree(fileListResult.files));
       } else if (browser.root) {
         rootSession.applyGitMetadata(gitStatus, diffStats);
         refreshLists();
@@ -651,6 +684,8 @@ export function createFileBrowser(
     if (previewViewer.isOpen()) previewViewer.close();
     clearCopyFeedback();
     previewPath = null;
+    previewInitialLinePending = undefined;
+    viewerInitialLinePending = undefined;
     pendingRestorePath = restoreLocation?.selectedFilePath ?? restoreLocation?.directoryPath ?? null;
     restoredDirectoryPath = restoreLocation?.directoryPath ?? null;
     restoreNotice = null;
@@ -667,6 +702,14 @@ export function createFileBrowser(
   }
 
   loadRoot(rootPath);
+  if (options.commandFilePath && dirname(options.commandFilePath) === rootPath) {
+    const file = options.commandFilePath;
+    openFile({
+      name: basename(file), path: file, isDirectory: false,
+      isSymlink: getPathInfoSync(file).isSymlink,
+      agentModified: agentModifiedFiles.has(file),
+    });
+  }
 
   function getDisplayList(): FlatNode[] {
     return deriveBrowserDisplayList(browser, query.snapshot());
@@ -723,7 +766,10 @@ export function createFileBrowser(
   }
 
   function openFile(node: FileNode): void {
-    viewer.setFile(node);
+    const sourceRange = node.path === initialSelectedPath ? viewerInitialLinePending : undefined;
+    viewer.setFile(node, sourceRange?.start, sourceRange?.end);
+    // A command line target is a one-shot navigation, not a sticky per-file setting.
+    viewerInitialLinePending = undefined;
   }
   function renderBrowser(width: number): string[] {
     return renderBrowserTree({
@@ -956,7 +1002,9 @@ export function createFileBrowser(
     if (selected && !previewPending) {
       if (previewPath !== selected.path) {
         clearPreviewCopyFeedback();
-        previewViewer.setFile(selected);
+        const sourceRange = selected.path === initialSelectedPath ? previewInitialLinePending : undefined;
+        previewViewer.setFile(selected, sourceRange?.start, sourceRange?.end);
+        if (sourceRange) previewInitialLinePending = undefined;
         previewPath = selected.path;
       } else {
         previewViewer.updateFileRef(selected);

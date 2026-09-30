@@ -23,6 +23,8 @@ export interface ViewerViewport {
   snapshot(): ViewportSnapshot;
   captureAnchor(): ViewportAnchor;
   restoreAnchor(anchor: ViewportAnchor, preserveSelection: boolean): void;
+  revealRangeStart(startLine: number): void;
+  clearRangeIntent(): void;
   setPosition(cursor: number, scroll?: number): void;
   revealGroup(group: number, scrollOffset: number): void;
   navigate(command: ViewportNavigation, selecting: boolean): void;
@@ -46,6 +48,7 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
   let selectStart = 0;
   let selectEnd = 0;
   let pendingCount = "";
+  let rangeStartLine: number | null = null;
 
   const rowGroup = (index: number): number => rowGroups[index] ?? index;
 
@@ -77,6 +80,14 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
     if (cursor < scroll) scroll = cursor;
     if (cursor >= scroll + height) scroll = cursor - height + 1;
     clampScroll();
+  };
+
+  const positionRange = (): void => {
+    if (rangeStartLine === null) return;
+    // Starting at the top exposes the end whenever the visual rows fit.
+    cursor = firstRowForGroup(Math.min(rangeStartLine - 1, logicalLineCount - 1));
+    scroll = cursor;
+    ensureCursorVisible();
   };
 
   const stepGroup = (row: number, direction: 1 | -1): number | null => {
@@ -111,6 +122,7 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
       selectStart = 0;
       selectEnd = 0;
       pendingCount = "";
+      rangeStartLine = null;
     },
     setLayout(nextRowGroups, nextLogicalLineCount): void {
       rowGroups = nextRowGroups;
@@ -127,6 +139,10 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
       };
     },
     restoreAnchor(anchor, preserveSelection): void {
+      if (rangeStartLine !== null) {
+        positionRange();
+        return;
+      }
       cursor = firstRowForGroup(anchor.cursorGroup);
       if (preserveSelection) {
         selectStart = firstRowForGroup(anchor.selectStartGroup);
@@ -134,17 +150,27 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
       }
       ensureCursorVisible();
     },
+    revealRangeStart(startLine): void {
+      rangeStartLine = startLine;
+      positionRange();
+    },
+    clearRangeIntent(): void {
+      rangeStartLine = null;
+    },
     setPosition(nextCursor, nextScroll = scroll): void {
+      rangeStartLine = null;
       cursor = nextCursor;
       scroll = nextScroll;
       ensureCursorVisible();
     },
     revealGroup(group, scrollOffset): void {
+      rangeStartLine = null;
       cursor = firstRowForGroup(group);
       scroll = Math.max(0, cursor - scrollOffset);
       clampScroll();
     },
     navigate(command, selecting): void {
+      rangeStartLine = null;
       if (command.type === "move") {
         moveByGroups(command.direction, 1, selecting);
         return;
@@ -167,6 +193,7 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
       ensureCursorVisible();
     },
     beginSelection(): void {
+      rangeStartLine = null;
       cursor = groupStart(cursor);
       selectStart = cursor;
       selectEnd = cursor;
@@ -193,7 +220,8 @@ export function createViewerViewport(initialHeight: number): ViewerViewport {
     },
     resize(nextHeight): void {
       height = nextHeight;
-      ensureCursorVisible();
+      if (rangeStartLine !== null) positionRange();
+      else ensureCursorVisible();
     },
     appendCount(digit): void {
       pendingCount += digit;

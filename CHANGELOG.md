@@ -1,6 +1,12 @@
 # Changelog
 
 All notable changes to this extension will be documented in this file.
+
+## Unreleased
+
+### Added
+- Accept a single file path (optionally `:line` or `:start-end`) in `/readfiles`, opening it directly in the viewer at the requested source line or with both range endpoints visible when they fit; `q` returns to its parent directory with the file selected.
+
 ## [0.8.1] - 2026-09-27
 
 ### Changed

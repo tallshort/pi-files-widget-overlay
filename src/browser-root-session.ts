@@ -61,6 +61,7 @@ interface BrowserRootSessionOptions {
   state: BrowserRootState;
   agentModifiedFiles: Set<string>;
   ignored: Set<string>;
+  explicitFilePath?: string;
   readDirectory: (path: string) => Promise<Dirent[]>;
   statFile?: (path: string) => Promise<{ size: number; mtimeMs: number }>;
   readTextFile?: (path: string) => Promise<string>;
@@ -247,8 +248,8 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
       const dirs: FileNode[] = [];
       const files: FileNode[] = [];
       for (const entry of sorted) {
-        if (ignored.has(entry.name)) continue;
         const fullPath = join(node.path, entry.name);
+        if (ignored.has(entry.name) && fullPath !== options.explicitFilePath) continue;
         const childDepth = depth + 1;
         const gitPath = normalizeGitPath(relative(rootPath, fullPath));
 
@@ -332,7 +333,7 @@ export function createBrowserRootSession(options: BrowserRootSessionOptions): Br
 
   function ensureNode(relPath: string): FileNode | null {
     if (!state.root) return null;
-    let normalized = normalizeGitPath(relPath.trim());
+    let normalized = normalizeGitPath(relPath);
     if (normalized.startsWith("./")) normalized = normalized.slice(2);
     const parts = normalized.split("/").filter(Boolean);
     if (parts.length === 0 || parts.length - 1 > MAX_TREE_DEPTH) return null;
