@@ -1,7 +1,7 @@
 import { copyToClipboard, type Theme } from "@earendil-works/pi-coding-agent";
 import { CURSOR_MARKER, truncateToWidth, visibleWidth } from "@earendil-works/pi-tui";
 import { readFileSync, statSync } from "node:fs";
-import { relative, sep } from "node:path";
+import { dirname, relative, sep } from "node:path";
 
 import {
   DEFAULT_VIEWER_HEIGHT,
@@ -319,15 +319,19 @@ export function createViewer(
     const fileNameWidth = Math.max(0, width - visibleWidth(copyHint));
     let header = theme.bold(theme.fg("text", truncateToWidth(sanitizeTerminalLabel(state.file.name), fileNameWidth, "…"))) + copyHint;
     if (isUntracked) header += theme.fg("dim", " [UNTRACKED]");
+    let modeHint = "";
     if (state.diffMode) {
-      header += theme.fg("warning", " [DIFF]");
+      modeHint = theme.fg("warning", " [DIFF]");
     } else if (isMarkdownFile()) {
-      header += theme.fg("accent", state.renderMarkdown ? " [RENDERED]" : " [RAW]");
+      modeHint = theme.fg("accent", state.renderMarkdown ? " [RENDERED]" : " [RAW]");
     }
+    header += modeHint;
     if (state.wrappable) header += theme.fg("accent", state.wordWrap ? " [WRAP]" : " [NO WRAP]");
+    let selectionHint = "";
     if (state.mode === "select" || state.mode === "comment") {
       const bounds = viewport.selectionBounds();
-      header += theme.fg("accent", ` [SELECT ${bounds.start + 1}-${bounds.end + 1}]`);
+      selectionHint = theme.fg("accent", ` [SELECT ${bounds.start + 1}-${bounds.end + 1}]`);
+      header += selectionHint;
     }
 
     if (state.file.diffStats) {
@@ -346,16 +350,60 @@ export function createViewer(
     }
 
     const searchState = search.snapshot();
+    let searchPosition = "";
+    let searchHint = "";
     if (state.mode === "search") {
-      header += theme.fg("accent", `  /${searchState.query}${CURSOR_MARKER}█`);
+      searchHint = theme.fg("accent", `  /${searchState.query}${CURSOR_MARKER}█`);
     } else if (searchState.query) {
-      const searchPosition = searchState.matchCount > 0
+      searchPosition = searchState.matchCount > 0
         ? `${searchState.matchIndex + 1}/${searchState.matchCount}`
         : "0/0";
-      header += theme.fg("dim", `  /${searchState.query}  (Esc clears) [${searchPosition}]`);
+      searchHint = theme.fg("dim", `  /${searchState.query}  (Esc clears) [${searchPosition}]`);
     }
+    header += searchHint;
+    const relativePath = relative(getRoot(), state.file.path);
+    const displayPath = !relativePath || relativePath === ".." || relativePath.startsWith(`..${sep}`)
+      ? state.file.path
+      : relativePath;
+    if (displayPath === state.file.name) return truncateToWidth(header, width);
 
-    return truncateToWidth(header, width);
+    const safePath = sanitizeTerminalLabel(displayPath);
+    const availablePathWidth = width - visibleWidth(header) - 3; // space and parentheses
+    if (availablePathWidth >= visibleWidth(safePath)) return header + theme.fg("dim", ` (${safePath})`);
+
+    // If only the directory fits, show explicitly that the filename was omitted.
+    // Keep status/search hints if possible; otherwise prioritize the directory that disambiguates the file.
+    const directory = sanitizeTerminalLabel(dirname(displayPath));
+    if (directory === ".") return truncateToWidth(header, width);
+    const directoryLabel = `${directory}${sep}…`;
+    if (availablePathWidth >= visibleWidth(directoryLabel)) return header + theme.fg("dim", ` (${directoryLabel})`);
+    const directoryReservation = Math.min(visibleWidth(directoryLabel), Math.max(6, Math.floor(width / 3)));
+    const minimumNameWidth = Math.min(visibleWidth(state.file.name), Math.max(4, Math.floor(width / 4)));
+    const hintWidth = Math.max(0, width - directoryReservation - minimumNameWidth - 3);
+    let essentialHint = selectionHint || modeHint;
+    if (selectionHint && visibleWidth(selectionHint + modeHint) <= hintWidth) essentialHint = modeHint + selectionHint;
+    if (searchHint) {
+      essentialHint = searchHint;
+      if (visibleWidth(essentialHint) > hintWidth) {
+        const tail = state.mode === "search" ? `${CURSOR_MARKER}█` : ` [${searchPosition}]`;
+        const queryWidth = Math.max(0, hintWidth - visibleWidth(`  /${tail}`));
+        const compactQuery = truncateToWidth(searchState.query, queryWidth, "…");
+        essentialHint = theme.fg(state.mode === "search" ? "accent" : "dim", `  /${compactQuery}${tail}`);
+      }
+    }
+    if (visibleWidth(essentialHint) > hintWidth) essentialHint = "";
+    const titleWidth = Math.max(0, width - visibleWidth(essentialHint) - directoryReservation - 3);
+    const title = theme.bold(theme.fg("text", truncateToWidth(sanitizeTerminalLabel(state.file.name), titleWidth, "…")));
+    const prefix = title + essentialHint;
+    const directoryWidth = width - visibleWidth(prefix) - 3;
+    if (directoryWidth < 4) return truncateToWidth(prefix, width);
+    if (visibleWidth(directoryLabel) <= directoryWidth) return prefix + theme.fg("dim", ` (${directoryLabel})`);
+    let suffix = "";
+    for (const character of Array.from(directory).reverse()) {
+      if (visibleWidth(`${character}${suffix}`) > directoryWidth - 3) break;
+      suffix = character + suffix;
+    }
+    return prefix + theme.fg("dim", ` (…${suffix}${sep}…)`);
   }
 
   function renderFooter(width: number): string[] {

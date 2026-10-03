@@ -109,6 +109,106 @@ describe("file viewer word wrapping", () => {
     expect(viewer.render(100)[0]).toContain("Unable to copy path");
   });
 
+  it("identifies same-named search results by their root-relative path in preview and viewer", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await mkdir(join(root, "docs"));
+    await mkdir(join(root, "packages"));
+    const first = join(root, "docs", "README.md");
+    const second = join(root, "packages", "README.md");
+    await writeFile(first, "first\n");
+    await writeFile(second, "second\n");
+    for (const readOnly of [true, false]) {
+      const viewer = createViewer({ getRoot: () => root, projectCwd: root, readOnly }, theme, () => {});
+      viewer.setFile({ name: "README.md", path: first, isDirectory: false });
+      expect(viewer.render(80)[0]).toMatch(/README\.md.*\(docs\/README\.md\)$/);
+      viewer.setFile({ name: "README.md", path: second, isDirectory: false });
+      expect(viewer.render(80)[0]).toMatch(/README\.md.*\(packages\/README\.md\)$/);
+      const narrowHeader = viewer.render(55)[0];
+      expect(narrowHeader).toContain("README.md");
+      expect(narrowHeader).toContain("(packages/README.md)");
+      viewer.setFile({ name: "README.md", path: first, isDirectory: false, gitStatus: "??" });
+      const firstTight = viewer.render(45)[0];
+      viewer.setFile({ name: "README.md", path: second, isDirectory: false, gitStatus: "??" });
+      const secondTight = viewer.render(45)[0];
+      expect(firstTight).toMatch(/\(docs\/…\)$/);
+      expect(secondTight).toMatch(/\(packages\/…\)$/);
+      expect(firstTight).not.toBe(secondTight);
+    }
+  });
+  it("keeps directory identity when a long filename fills the preview or viewer title", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await mkdir(join(root, "docs"));
+    await mkdir(join(root, "packages"));
+    const name = `${"readme".repeat(9)}.md`;
+    for (const directory of ["docs", "packages"]) {
+      await writeFile(join(root, directory, name), "body\n");
+    }
+    for (const readOnly of [true, false]) {
+      const viewer = createViewer({ getRoot: () => root, projectCwd: root, readOnly }, theme, () => {});
+      for (const directory of ["docs", "packages"]) {
+        viewer.setFile({ name, path: join(root, directory, name), isDirectory: false });
+        expect(viewer.render(56)[0]).toContain(`(${directory}/…)`);
+      }
+    }
+  });
+
+  it("retains search input and confirmed match status alongside a truncated directory", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await mkdir(join(root, "docs"));
+    const filePath = join(root, "docs", "README.md");
+    await writeFile(filePath, "needle\n");
+    const viewer = createViewer({ getRoot: () => root, projectCwd: root }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    viewer.handleInput("/");
+    viewer.handleInput("needle");
+    const editing = viewer.render(35)[0];
+    expect(editing).toContain(`/needle${CURSOR_MARKER}█`);
+    expect(editing).toContain("(docs/…)");
+    viewer.handleInput("\r");
+    const confirmed = viewer.render(80)[0];
+    expect(confirmed).toContain("/needle  (Esc clears) [1/1]");
+    expect(confirmed).toContain("(docs/README.md)");
+
+    const deepDirectory = join(root, "docs", ...Array.from({ length: 4 }, (_, index) => `long-directory-${index}`));
+    await mkdir(deepDirectory, { recursive: true });
+    const deepFile = join(deepDirectory, "README.md");
+    await writeFile(deepFile, "needle\n");
+    const deepViewer = createViewer({ getRoot: () => root, projectCwd: root }, theme, () => {});
+    deepViewer.setFile({ name: "README.md", path: deepFile, isDirectory: false });
+    deepViewer.handleInput("/");
+    deepViewer.handleInput("needle");
+    deepViewer.handleInput("\r");
+    const deepHeader = deepViewer.render(80)[0];
+    expect(deepHeader).toContain("/needle  (Esc clears) [1/1]");
+    expect(deepHeader).toMatch(/\(…?.*long-directory-3\/…\)$/);
+  });
+  it("retains selection and long-search identity in compact nested-file titles", async () => {
+    const root = await mkdtemp(join(tmpdir(), "pi-files-widget-overlay-"));
+    directories.push(root);
+    await mkdir(join(root, "docs"));
+    const filePath = join(root, "docs", "README.md");
+    const query = "abcdefghijklmnopqrstuvwxy";
+    await writeFile(filePath, `${query}\n`);
+    const viewer = createViewer({ getRoot: () => root, projectCwd: root }, theme, () => {});
+    viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
+    viewer.handleInput("v");
+    const selected = viewer.render(35)[0];
+    expect(selected).toContain("[SELECT 1-1]");
+    expect(selected).toContain("(docs/…)");
+    viewer.handleInput("v");
+    viewer.handleInput("/");
+    viewer.handleInput(query);
+    viewer.handleInput("\r");
+    const searched = viewer.render(50)[0];
+    expect(searched).toContain("README");
+    expect(searched).toContain("/abc");
+    expect(searched).toContain("[1/1]");
+    expect(searched).toContain("(docs/…)");
+  });
+
   it("derives initial and maximum panel heights from terminal rows", () => {
     expect(getResponsivePanelHeight(28, 40, 9, 24)).toBe(11);
     expect(getResponsivePanelHeight(29, 50, 8, 60)).toBe(43);
@@ -116,8 +216,8 @@ describe("file viewer word wrapping", () => {
     expect(getResponsivePanelHeight(28, 40, 9, 0)).toBe(28);
   });
   it("keeps confirmed searches available to n and N", async () => {
-    const filePath = await createSourceFile("needle one\nother\nneedle two\n");
-    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, () => {});
+    const filePath = await createSourceFile("needle one\nother\nneedle two\n", "search.ts");
+    const viewer = createViewer({ getRoot: () => dirname(filePath), projectCwd: tmpdir() }, theme, () => {});
     viewer.setFile({ name: "search.ts", path: filePath, isDirectory: false });
 
     viewer.handleInput("/");
@@ -457,7 +557,7 @@ describe("file viewer word wrapping", () => {
     const filePath = await createSourceFile();
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
     const viewer = createViewer(
-      { getRoot: () => tmpdir(), projectCwd: tmpdir() },
+      { getRoot: () => dirname(filePath), projectCwd: tmpdir() },
       theme,
       (payload, comment) => comments.push({ payload, comment })
     );
@@ -544,9 +644,9 @@ describe("file viewer word wrapping", () => {
   });
 
   it("gives active search and comment editing precedence over normal viewer commands", async () => {
-    const filePath = await createSourceFile("alpha\nbeta\n");
+    const filePath = await createSourceFile("alpha\nbeta\n", "precedence.ts");
     const comments: string[] = [];
-    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
+    const viewer = createViewer({ getRoot: () => dirname(filePath), projectCwd: tmpdir() }, theme, (_payload, comment) => comments.push(comment));
     viewer.setFile({ name: "precedence.ts", path: filePath, isDirectory: false });
     viewer.render(80);
 
@@ -856,7 +956,7 @@ describe("file viewer word wrapping", () => {
   it("resets rendered Markdown selection to a source-aligned raw line", async () => {
     const filePath = await createSourceFile("# Title\n\nThis paragraph is deliberately long enough to wrap when rendered in a narrow viewer.\n", "README.md");
     const comments: Array<{ payload: CommentPayload; comment: string }> = [];
-    const viewer = createViewer({ getRoot: () => tmpdir(), projectCwd: tmpdir() }, theme, (payload, comment) => comments.push({ payload, comment }));
+    const viewer = createViewer({ getRoot: () => dirname(filePath), projectCwd: tmpdir() }, theme, (payload, comment) => comments.push({ payload, comment }));
     viewer.setFile({ name: "README.md", path: filePath, isDirectory: false });
     initTheme();
     const noWrap = loadFileContent(filePath, { cwd: tmpdir(), diffMode: false, hasChanges: false, width: 24, renderMarkdown: true, wordWrap: false }, theme);
