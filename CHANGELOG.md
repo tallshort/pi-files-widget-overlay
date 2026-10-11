@@ -4,11 +4,16 @@ All notable changes to this extension will be documented in this file.
 
 ## Unreleased
 
+## [0.9.0] - 2026-10-11
+
 ### Added
 - Accept a single file path (optionally `:line` or `:start-end`) in `/readfiles`, opening it directly in the viewer at the requested source line or with both range endpoints visible when they fit; `q` returns to its parent directory with the file selected.
 
 ### Changed
 - Show the current-root-relative path beside nested filenames in preview and viewer titles; when space is tight, retain the distinguishing directory with an ellipsis without hiding viewer search input or results.
+
+### Fixed
+- Keep confirmed Git-ignored files out of changed-only views and changed-file navigation even when the agent modified them during the session.
 
 ## [0.8.1] - 2026-09-27
 
